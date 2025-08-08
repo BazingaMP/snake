@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multiplayer Snake – Sidebar, Multi‑Food, Smarter Bot (A*)</title>
+  <title>Multiplayer Snake – Sidebar, Multi‑Food, Smarter Bot (A* + Anti‑Loop)</title>
   <style>
     :root {
       --bg: #0f1220;
@@ -126,7 +126,7 @@
     };
 
     // Persistence
-    const storageKey = 'snake.multi.v3';
+    const storageKey = 'snake.multi.v4';
     const store = JSON.parse(localStorage.getItem(storageKey) || '{}');
 
     // Config
@@ -227,6 +227,7 @@
         hi: Number(localStorage.getItem('snake.multi.hi')||0)
       };
       for(let i=0;i<CFG.foodCount;i++) STATE.foods.push(newFood(STATE));
+      BOTSTATE = { lastTarget:null, banned:new Map(), stallTicks:0, lastScore:0, lastHead:null };
       updateUI();
     }
 
@@ -261,7 +262,7 @@
       snake.pendingDir = dir;
     }
 
-    // --- Bot AI: A* pathfinding to nearest food + safe-area fallback
+    // --- Bot AI: A* pathfinding with stall detection & anti-loop
     function neighborsOf(p){
       const res = [
         {dir:'UP',    x:p.x,   y:p.y-1},
@@ -286,6 +287,7 @@
       return false;
     }
     const keyOf = (p)=> `${p.x},${p.y}`;
+
     function reconstruct(firstStepFrom, startKey, goalKey){
       let k = goalKey;
       while (firstStepFrom.get(k) && firstStepFrom.get(k).prev){
@@ -295,22 +297,20 @@
       }
       return firstStepFrom.get(goalKey)?.dir || null;
     }
-    function aStarToNearestFood(state){
-      const bot = state.snakes[1]; const head = bot.body[0];
-      if(!state.foods.length) return null;
-      const foods = state.foods.slice().sort((a,b)=> (Math.abs(head.x-a.x)+Math.abs(head.y-a.y)) - (Math.abs(head.x-b.x)+Math.abs(head.y-b.y)));
-      const startKey = keyOf(head);
+
+    function aStar(state, start, goal){
+      const startKey = keyOf(start);
       const gScore = new Map([[startKey,0]]);
       const fScore = new Map([[startKey,0]]);
       const firstStepFrom = new Map();
       const open = new Set([startKey]);
-      const goals = new Set(foods.map(keyOf));
-      const h = (p)=> Math.abs(p.x-foods[0].x)+Math.abs(p.y-foods[0].y);
+      const goalKey = keyOf(goal);
+      const h = (p)=> Math.abs(p.x-goal.x)+Math.abs(p.y-goal.y);
       while(open.size){
         let currentKey=null, best=Infinity;
         for(const k of open){ const fs=fScore.get(k) ?? Infinity; if(fs<best){ best=fs; currentKey=k; } }
         const [cx,cy] = currentKey.split(',').map(Number); const current={x:cx,y:cy};
-        if(goals.has(currentKey)) return reconstruct(firstStepFrom, startKey, currentKey);
+        if(currentKey===goalKey) return reconstruct(firstStepFrom, startKey, goalKey);
         open.delete(currentKey);
         for(const n of neighborsOf(current)){
           if(isBlocked(state, n, true)) continue;
@@ -327,6 +327,7 @@
       }
       return null; // no path
     }
+
     function floodFillSize(state, start, limit=800){
       const seen = new Set();
       const q = [start];
@@ -336,26 +337,66 @@
       }
       return seen.size;
     }
+
+    let BOTSTATE = { lastTarget:null, banned:new Map(), stallTicks:0, lastScore:0, lastHead:null };
+
+    function chooseTarget(state, head){
+      // ignore temporarily banned foods
+      const now = STATE.tick;
+      const candidates = state.foods.filter(f => (BOTSTATE.banned.get(keyOf(f)) ?? 0) < now);
+      if(!candidates.length) return null;
+      // sort by distance, but add tiny noise to break ties
+      candidates.sort((a,b)=> (Math.abs(head.x-a.x)+Math.abs(head.y-a.y)) - (Math.abs(head.x-b.x)+Math.abs(head.y-b.y)) + (Math.random()-0.5)*0.1);
+      // try to find a target we actually have a path to
+      for(const f of candidates){
+        const dir = aStar(state, head, f);
+        if(dir) { BOTSTATE.lastTarget = f; return { target:f, firstDir:dir }; }
+      }
+      return { target:null, firstDir:null };
+    }
+
     function botThink(state){
       const bot = state.snakes[1]; if(!bot.alive) return; const head = bot.body[0];
-      const firstDir = aStarToNearestFood(state);
-      if(firstDir){ bot.pendingDir = firstDir; return; }
-      // fallback: maximize reachable open space
-      let bestDir = bot.dir, bestSize = -1;
+
+      // Stall detection: if no score progress and head not moving closer for a while, we consider stalled
+      const currentScore = bot.score;
+      const lastHead = BOTSTATE.lastHead; BOTSTATE.lastHead = {x:head.x, y:head.y};
+      if(currentScore>BOTSTATE.lastScore){ BOTSTATE.stallTicks = 0; BOTSTATE.lastScore = currentScore; }
+      else BOTSTATE.stallTicks++;
+
+      // Expire old bans
+      const now = STATE.tick; for(const [k,until] of BOTSTATE.banned){ if(until<now) BOTSTATE.banned.delete(k); }
+
+      // 1) Try chooseTarget (A* to a reachable food)
+      let plan = chooseTarget(state, head);
+      if(plan && plan.firstDir){ bot.pendingDir = plan.firstDir; return; }
+
+      // 2) If stalled for a bit, ban the last target and replan
+      if(BOTSTATE.stallTicks > 30 && BOTSTATE.lastTarget){
+        BOTSTATE.banned.set(keyOf(BOTSTATE.lastTarget), now + 200); // ban for 200 ticks
+        BOTSTATE.lastTarget = null; BOTSTATE.stallTicks = 0;
+        plan = chooseTarget(state, head);
+        if(plan && plan.firstDir){ bot.pendingDir = plan.firstDir; return; }
+      }
+
+      // 3) Fallback: score each legal move by open space + distance + small randomness
+      let bestDir = bot.dir; let best = -1e9;
+      const nearest = state.foods[0] ? state.foods.slice().sort((a,b)=> (Math.abs(head.x-a.x)+Math.abs(head.y-a.y)) - (Math.abs(head.x-b.x)+Math.abs(head.y-b.y)))[0] : null;
       for(const dir of ['UP','DOWN','LEFT','RIGHT']){
         if(OPP[bot.dir]===dir) continue;
-        const d = DIRS[dir];
-        let np = { x: head.x + d[0], y: head.y + d[1] };
-        if(CFG.wrap) np = wrapPos(np);
+        const v = DIRS[dir]; let np = {x: head.x+v[0], y: head.y+v[1]}; if(CFG.wrap) np=wrapPos(np);
         if(isBlocked(state,np,true)) continue;
-        const size = floodFillSize(state, np, 1000);
-        if(size > bestSize){ bestSize = size; bestDir = dir; }
+        const area = floodFillSize(state, np, 1000);
+        const dist = nearest ? (Math.abs(np.x-nearest.x)+Math.abs(np.y-nearest.y)) : 0;
+        const score = 0.35*Math.log(1+area) - 0.6*dist + (Math.random()*0.3);
+        if(score>best){ best=score; bestDir=dir; }
       }
       bot.pendingDir = bestDir;
     }
 
     // --- Tick / Update
     function step(){
+      STATE.tick++;
       for(const s of STATE.snakes){ if(!s.alive) continue; s.dir = s.pendingDir; }
       if(STATE.mode==='BOT') botThink(STATE);
 
@@ -371,17 +412,20 @@
 
         s.body.unshift(next);
         // eat any overlapping food; support multiple foods
+        let ate = false;
         STATE.foods = STATE.foods.filter(f => {
           if(equal(next,f)){
             s.grow += 2;
             s.score += 10;
-            return false;
+            ate = true; return false;
           }
           return true;
         });
         while(STATE.foods.length < CFG.foodCount) STATE.foods.push(newFood(STATE));
 
         if(s.grow>0) s.grow--; else s.body.pop();
+
+        if(s.id==='BOT' && ate){ BOTSTATE.stallTicks = 0; BOTSTATE.lastTarget = null; }
       }
 
       // Update highscore
