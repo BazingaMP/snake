@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multiplayer Snake – Smarter Bot (A* + Tail‑Chase + 2‑Step Safety)</title>
+  <title>Snake — Single or Local Multiplayer + Bonus Items</title>
   <style>
     :root { --bg:#0f1220; --panel:#1b2038; --accent:#7cf49a; --accent2:#6ea8fe; --danger:#ff6b6b; --text:#e9ecf1; --muted:#9aa4b2; --grid:#1e2442; }
     *{box-sizing:border-box}
@@ -25,29 +25,33 @@
     .gameWrap{position:relative;display:grid;place-items:center}
     canvas{background:repeating-linear-gradient(0deg,var(--grid),var(--grid) 1px,transparent 1px,transparent 24px),repeating-linear-gradient(90deg,var(--grid),var(--grid) 1px,transparent 1px,transparent 24px),linear-gradient(180deg,#0b0e1a,#0c1021);border-radius:16px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 12px 40px rgba(0,0,0,0.45)}
     @media (max-width:960px){.wrap{grid-template-columns:1fr}}
+    .pill{display:inline-block;padding:.2rem .45rem;border-radius:9999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-size:12px}
   </style>
 </head>
 <body>
   <div class="wrap">
     <aside class="panel">
-      <h1>🐍 Multiplayer Snake</h1>
+      <h1>🐍 Snake</h1>
       <div class="kv" id="scoreboard">
         <div>Mode</div><div id="modeName">—</div>
         <div>Score P1</div><div id="score1">0</div>
-        <div>Score P2/Bot</div><div id="score2">0</div>
+        <div>Score P2</div><div id="score2">0</div>
         <div>Highscore</div><div id="hi">0</div>
         <div>Speed</div><div><span id="speedLabel">10</span> ticks/s</div>
         <div>Foods</div><div id="foodsLabel">4</div>
+        <div>Items</div><div id="itemsLabel" class="pill">0 on board</div>
       </div>
+
       <h2>Play</h2>
       <div class="row">
-        <button class="btn primary" id="btnBot">🚀 vs Bot</button>
-        <button class="btn" id="btnLocal">🎮 Local Versus</button>
+        <button class="btn primary" id="btnSingle">🧍 Single Player</button>
+        <button class="btn" id="btnLocal">👥 Local Versus</button>
       </div>
       <div class="row" style="margin-top:10px">
         <button class="btn" id="btnPause">⏯️ Pause</button>
         <button class="btn danger" id="btnRestart">🔁 Restart</button>
       </div>
+
       <h2>Settings</h2>
       <label>Speed <input type="range" id="speed" min="5" max="25" step="1" value="10"/></label>
       <label>Board Size
@@ -59,11 +63,16 @@
       <label><input type="checkbox" id="wrap" checked/> Wrap walls (classic)</label>
       <label><input type="checkbox" id="hazards"/> Random hazards</label>
       <label>Food count <input type="number" id="foodCount" min="1" max="10" value="4"/></label>
-      <p class="small">Center overlay removed. Space = pause. P1: Arrows, P2: WASD.</p>
+      <label>Max items <input type="number" id="itemMax" min="0" max="6" value="2"/></label>
+      <p class="small">Space = pause. P1: Arrows, P2: WASD. Center overlay removed.</p>
+
       <h2>Legend</h2>
       <div class="kv small">
         <div>🍋 Food</div><div>Yellow square with outline</div>
         <div>☠️ Hazard</div><div>Red X (don’t touch)</div>
+        <div>🌀 Shrink</div><div>Reduce your snake by <b>30%</b></div>
+        <div>⭐ Bonus</div><div>+50 score instantly</div>
+        <div>💣 Clear</div><div>Remove all hazards</div>
       </div>
     </aside>
     <main class="gameWrap">
@@ -77,12 +86,12 @@
     const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
     const canvas=document.getElementById('game');
     const ctx=canvas.getContext('2d');
-    const ui={sbMode:modeName,sb1:score1,sb2:score2,hi:hi,speed:speed,speedLabel:speedLabel,cols:cols,rows:rows,wrap:wrap,hazards:hazards,foodCount:foodCount,foodsLabel:foodsLabel,btnPause:btnPause,btnRestart:btnRestart,btnBot:btnBot,btnLocal:btnLocal};
+    const ui={sbMode:modeName,sb1:score1,sb2:score2,hi:hi,speed:speed,speedLabel:speedLabel,cols:cols,rows:rows,wrap:wrap,hazards:hazards,foodCount:foodCount,foodsLabel:foodsLabel,itemMax:itemMax,itemsLabel:itemsLabel,btnPause:btnPause,btnRestart:btnRestart,btnSingle:btnSingle,btnLocal:btnLocal};
 
-    const storageKey='snake.multi.v6';
+    const storageKey='snake.local.v1';
     const store=JSON.parse(localStorage.getItem(storageKey)||'{}');
-    let CFG={cols:Number(store.cols)||28,rows:Number(store.rows)||22,cell:24,speed:Number(store.speed)||10,wrap:store.wrap!==undefined?!!store.wrap:true,hazards:!!store.hazards,foodCount:Number(store.foodCount)||4};
-    function saveConfig(){localStorage.setItem(storageKey,JSON.stringify({cols:CFG.cols,rows:CFG.rows,speed:CFG.speed,wrap:CFG.wrap,hazards:CFG.hazards,foodCount:CFG.foodCount}))}
+    let CFG={cols:Number(store.cols)||28,rows:Number(store.rows)||22,cell:24,speed:Number(store.speed)||10,wrap:store.wrap!==undefined?!!store.wrap:true,hazards:!!store.hazards,foodCount:Number(store.foodCount)||4,itemMax:Number(store.itemMax)||2};
+    function saveConfig(){localStorage.setItem(storageKey,JSON.stringify({cols:CFG.cols,rows:CFG.rows,speed:CFG.speed,wrap:CFG.wrap,hazards:CFG.hazards,foodCount:CFG.foodCount,itemMax:CFG.itemMax}))}
     function resizeCanvas(){canvas.width=CFG.cols*CFG.cell;canvas.height=CFG.rows*CFG.cell}
 
     const DIRS={UP:[0,-1],DOWN:[0,1],LEFT:[-1,0],RIGHT:[1,0]};
@@ -96,94 +105,211 @@
     function newFood(state){let p;let tries=0;do{p={x:rnd(state.cols),y:rnd(state.rows)};tries++;if(tries>2000)break}while(collisionAt(state,p));return p}
     function newHazards(state,count){const hz=[];for(let i=0;i<count;i++){let p;let tries=0;do{p={x:rnd(state.cols),y:rnd(state.rows)};tries++;if(tries>2000)break}while(collisionAt(state,p));hz.push(p)}return hz}
 
-    function collisionAt(state,p){for(const s of state.snakes){for(const c of s.body){if(equal(c,p))return true}}if(state.hazards)for(const h of state.haz){if(equal(h,p))return true}if(state.foods)for(const f of state.foods){if(equal(f,p))return true}return false}
+    function collisionAt(state,p){for(const s of state.snakes){for(const c of s.body){if(equal(c,p))return true}}if(state.hazards)for(const h of state.haz){if(equal(h,p))return true}if(state.foods)for(const f of state.foods){if(equal(f,p))return true}if(state.items)for(const it of state.items){if(equal(it,p))return true}return false}
 
+    // Items
+    const ITEM_TYPES=['shrink','bonus','clear'];
+    function newItem(state){
+      let p; let tries=0;
+      do { p={x:rnd(state.cols), y:rnd(state.rows)}; tries++; if(tries>2000) break; }
+      while(collisionAt(state,p));
+      const type = ITEM_TYPES[rnd(ITEM_TYPES.length)];
+      return {x:p.x,y:p.y,type};
+    }
+
+    // Game lifecycle
     let STATE={};
-    const MODES={BOT:'vs Bot',LOCAL:'Local Versus'};
-    function init(mode='BOT'){
-      CFG.speed=clamp(Number(ui.speed.value),5,25);CFG.cols=clamp(Number(ui.cols.value),12,64);CFG.rows=clamp(Number(ui.rows.value),10,48);CFG.wrap=!!ui.wrap.checked;CFG.hazards=!!ui.hazards.checked;CFG.foodCount=clamp(Number(ui.foodCount.value),1,10);saveConfig();resizeCanvas();
+    const MODES={SINGLE:'Single', LOCAL:'Local Versus'};
+
+    function init(mode='SINGLE'){
+      CFG.speed=clamp(Number(ui.speed.value),5,25);
+      CFG.cols=clamp(Number(ui.cols.value),12,64);
+      CFG.rows=clamp(Number(ui.rows.value),10,48);
+      CFG.wrap=!!ui.wrap.checked;
+      CFG.hazards=!!ui.hazards.checked;
+      CFG.foodCount=clamp(Number(ui.foodCount.value),1,10);
+      CFG.itemMax=clamp(Number(ui.itemMax.value),0,6);
+      saveConfig();
+      resizeCanvas();
+
       const s1=newSnake('P1','#7cf49a',{x:Math.floor(CFG.cols*0.25),y:Math.floor(CFG.rows/2)},'RIGHT');
-      const s2=newSnake(mode==='BOT'?'BOT':'P2',mode==='BOT'?'#f7d774':'#6ea8fe',{x:Math.floor(CFG.cols*0.75),y:Math.floor(CFG.rows/2)},'LEFT');
-      STATE={cols:CFG.cols,rows:CFG.rows,snakes:[s1,s2],foods:[],haz:CFG.hazards?newHazards({cols:CFG.cols,rows:CFG.rows,snakes:[s1,s2],foods:[]},Math.floor((CFG.cols*CFG.rows)/180)):[],hazards:CFG.hazards,mode,paused:false,over:false,tick:0,lastStep:0,hi:Number(localStorage.getItem('snake.multi.hi')||0)};
+      const snakes = [s1];
+      if(mode==='LOCAL'){
+        const s2=newSnake('P2','#6ea8fe',{x:Math.floor(CFG.cols*0.75),y:Math.floor(CFG.rows/2)},'LEFT');
+        snakes.push(s2);
+      }
+      STATE={cols:CFG.cols,rows:CFG.rows,snakes,foods:[],items:[],haz:CFG.hazards?newHazards({cols:CFG.cols,rows:CFG.rows,snakes,foods:[],items:[]},Math.floor((CFG.cols*CFG.rows)/180)):[],hazards:CFG.hazards,mode,paused:false,over:false,tick:0,lastStep:0,hi:Number(localStorage.getItem('snake.multi.hi')||0)};
       for(let i=0;i<CFG.foodCount;i++)STATE.foods.push(newFood(STATE));
-      BOTSTATE={lastTarget:null,banned:new Map(),stallTicks:0,lastScore:0,lastHead:null};
       updateUI();
     }
-    function updateUI(){ui.sbMode.textContent=STATE.mode==='BOT'?MODES.BOT:MODES.LOCAL;ui.sb1.textContent=STATE.snakes[0].score;ui.sb2.textContent=STATE.snakes[1].score;ui.hi.textContent=STATE.hi;ui.speedLabel.textContent=CFG.speed;ui.foodsLabel.textContent=CFG.foodCount;ui.btnPause.textContent=STATE.paused?'▶️ Resume':'⏸️ Pause';ui.btnPause.setAttribute('aria-pressed',STATE.paused);document.getElementById('modeName').style.color=STATE.mode==='BOT'?'#f7d774':'#6ea8fe'}
 
-    const keyDirs={'ArrowUp':'UP','ArrowDown':'DOWN','ArrowLeft':'LEFT','ArrowRight':'RIGHT','w':'UP','s':'DOWN','a':'LEFT','d':'RIGHT','W':'UP','S':'DOWN','A':'LEFT','D':'RIGHT'};
-    window.addEventListener('keydown',e=>{if(e.code==='Space'){STATE.paused=!STATE.paused;updateUI();return}const k=e.key;if(!keyDirs[k])return;const dir=keyDirs[k];if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k))setDir(STATE.snakes[0],dir);else setDir(STATE.snakes[1],dir)});
-    function setDir(snake,dir){if(OPP[snake.dir]===dir)return;snake.pendingDir=dir}
-
-    // Bot AI
-    function neighborsOf(p){const res=[{dir:'UP',x:p.x,y:p.y-1},{dir:'DOWN',x:p.x,y:p.y+1},{dir:'LEFT',x:p.x-1,y:p.y},{dir:'RIGHT',x:p.x+1,y:p.y}];if(CFG.wrap)for(const n of res){n.x=(n.x+CFG.cols)%CFG.cols;n.y=(n.y+CFG.rows)%CFG.rows}return res}
-    function isBlocked(state,p,considerTailFree=false){if(!CFG.wrap&&!(p.x>=0&&p.x<CFG.cols&&p.y>=0&&p.y<CFG.rows))return true;if(state.hazards)for(const h of state.haz){if(equal(h,p))return true}for(const s of state.snakes){for(let i=0;i<s.body.length;i++){const cell=s.body[i];if(considerTailFree&&s===state.snakes[1]&&i===s.body.length-1&&s.grow===0)continue;if(equal(cell,p))return true}}return false}
-    const keyOf=p=>`${p.x},${p.y}`;
-    function reconstruct(firstStepFrom,startKey,goalKey){let k=goalKey;while(firstStepFrom.get(k)&&firstStepFrom.get(k).prev){const prev=firstStepFrom.get(k).prev;if(prev===startKey)return firstStepFrom.get(k).dir;k=prev}return firstStepFrom.get(goalKey)?.dir||null}
-    function aStar(state,start,goal){const startKey=keyOf(start);const gScore=new Map([[startKey,0]]);const fScore=new Map([[startKey,0]]);const firstStepFrom=new Map();const open=new Set([startKey]);const goalKey=keyOf(goal);const h=p=>Math.abs(p.x-goal.x)+Math.abs(p.y-goal.y);while(open.size){let currentKey=null,best=Infinity;for(const k of open){const fs=fScore.get(k)??Infinity;if(fs<best){best=fs;currentKey=k}}const [cx,cy]=currentKey.split(',').map(Number);const current={x:cx,y:cy};if(currentKey===goalKey)return reconstruct(firstStepFrom,startKey,goalKey);open.delete(currentKey);for(const n of neighborsOf(current)){if(isBlocked(state,n,true))continue;const nk=keyOf(n);const tentative=(gScore.get(currentKey)??Infinity)+1;if(tentative<(gScore.get(nk)??Infinity)){gScore.set(nk,tentative);const dir=firstStepFrom.get(currentKey)?.dir||n.dir;firstStepFrom.set(nk,{prev:currentKey,dir});fScore.set(nk,tentative+h(n));open.add(nk)}}}return null}
-    function floodFillSize(state,start,limit=800){const seen=new Set();const q=[start];while(q.length&&seen.size<limit){const p=q.shift();const k=keyOf(p);if(seen.has(k))continue;seen.add(k);for(const n of neighborsOf(p))if(!isBlocked(state,n,true))q.push({x:n.x,y:n.y})}return seen.size}
-
-    let BOTSTATE={lastTarget:null,banned:new Map(),stallTicks:0,lastScore:0,lastHead:null};
-    function chooseTarget(state,head){const now=STATE.tick;const candidates=state.foods.filter(f=>(BOTSTATE.banned.get(keyOf(f))??0)<now);if(!candidates.length)return null;candidates.sort((a,b)=>(Math.abs(head.x-a.x)+Math.abs(head.y-a.y))-(Math.abs(head.x-b.x)+Math.abs(head.y-b.y))+(Math.random()-0.5)*0.1);for(const f of candidates){const dir=aStar(state,head,f);if(dir){BOTSTATE.lastTarget=f;return{target:f,firstDir:dir}}}return{target:null,firstDir:null}}
-
-    // Two-step safety helpers
-    function nextPosFrom(pos,dir){const v=DIRS[dir];let np={x:pos.x+v[0],y:pos.y+v[1]};if(CFG.wrap)np=wrapPos(np);return np}
-    function countLegalMoves(state,pos,dirAfter){let cnt=0;for(const d of ['UP','DOWN','LEFT','RIGHT']){if(OPP[dirAfter]===d)continue;const np=nextPosFrom(pos,d);if(!isBlocked(state,np,true))cnt++}return cnt}
-
-    function botThink(state){
-      const bot=state.snakes[1]; if(!bot.alive)return; const head=bot.body[0];
-      const currentScore=bot.score; BOTSTATE.lastHead={x:head.x,y:head.y}; if(currentScore>BOTSTATE.lastScore){BOTSTATE.stallTicks=0;BOTSTATE.lastScore=currentScore}else BOTSTATE.stallTicks++;
-      const now=STATE.tick; for(const [k,until] of BOTSTATE.banned){ if(until<now) BOTSTATE.banned.delete(k) }
-
-      let plan=chooseTarget(state,head);
-      if(plan&&plan.firstDir){const np=nextPosFrom(head,plan.firstDir);if(!isBlocked(state,np,true)&&countLegalMoves(state,np,plan.firstDir)>0){bot.pendingDir=plan.firstDir;return}}
-
-      const tail=bot.body[bot.body.length-1]; const toTail=aStar(state,head,tail);
-      if(toTail){const np=nextPosFrom(head,toTail);if(!isBlocked(state,np,true)&&countLegalMoves(state,np,toTail)>0){bot.pendingDir=toTail;return}}
-
-      if(BOTSTATE.stallTicks>30&&BOTSTATE.lastTarget){BOTSTATE.banned.set(keyOf(BOTSTATE.lastTarget),now+200);BOTSTATE.lastTarget=null;BOTSTATE.stallTicks=0;plan=chooseTarget(state,head);if(plan&&plan.firstDir){const np=nextPosFrom(head,plan.firstDir);if(!isBlocked(state,np,true)&&countLegalMoves(state,np,plan.firstDir)>0){bot.pendingDir=plan.firstDir;return}}}
-
-      let bestDir=bot.dir,best=-1e9; const nearest=state.foods[0]?state.foods.slice().sort((a,b)=>(Math.abs(head.x-a.x)+Math.abs(head.y-a.y))-(Math.abs(head.x-b.x)+Math.abs(head.y-b.y)))[0]:null;
-      for(const dir of ['UP','DOWN','LEFT','RIGHT']){
-        if(OPP[bot.dir]===dir)continue; const np=nextPosFrom(head,dir); if(isBlocked(state,np,true))continue; if(countLegalMoves(state,np,dir)===0)continue;
-        const area=floodFillSize(state,np,1000); const dist=nearest?(Math.abs(np.x-nearest.x)+Math.abs(np.y-nearest.y)):0; const turnBonus=(dir!==bot.dir)?0.15:0; const score=0.35*Math.log(1+area)-0.6*dist+turnBonus+(Math.random()*0.1);
-        if(score>best){best=score;bestDir=dir}
-      }
-      bot.pendingDir=bestDir;
+    function updateUI(){
+      ui.sbMode.textContent = STATE.mode=== 'SINGLE' ? MODES.SINGLE : MODES.LOCAL;
+      ui.sb1.textContent = STATE.snakes[0]?.score ?? 0;
+      ui.sb2.textContent = STATE.snakes[1]?.score ?? 0;
+      ui.hi.textContent = STATE.hi;
+      ui.speedLabel.textContent = CFG.speed;
+      ui.foodsLabel.textContent = CFG.foodCount;
+      ui.itemsLabel.textContent = `${STATE.items.length} on board`;
+      ui.btnPause.textContent = STATE.paused ? '▶️ Resume' : '⏸️ Pause';
+      ui.btnPause.setAttribute('aria-pressed', STATE.paused);
+      document.getElementById('modeName').style.color = STATE.mode==='SINGLE' ? '#f7d774' : '#6ea8fe';
     }
 
-    function step(){STATE.tick++; for(const s of STATE.snakes){if(!s.alive)continue;s.dir=s.pendingDir} if(STATE.mode==='BOT')botThink(STATE);
-      for(const s of STATE.snakes){ if(!s.alive)continue; const d=DIRS[s.dir]; let next={x:s.body[0].x+d[0],y:s.body[0].y+d[1]}; if(CFG.wrap)next=wrapPos(next);
-        if(!CFG.wrap&&!inBounds(next)){kill(s);continue} if(hitSnake(next)){kill(s);continue} if(CFG.hazards&&hitHazard(next)){kill(s);continue}
-        s.body.unshift(next); let ate=false; STATE.foods=STATE.foods.filter(f=>{if(equal(next,f)){s.grow+=2;s.score+=10;ate=true;return false}return true}); while(STATE.foods.length<CFG.foodCount)STATE.foods.push(newFood(STATE)); if(s.grow>0)s.grow--; else s.body.pop(); if(s.id==='BOT'&&ate){BOTSTATE.stallTicks=0;BOTSTATE.lastTarget=null}}
-      const maxScore=Math.max(STATE.snakes[0].score,STATE.snakes[1].score); if(maxScore>STATE.hi){STATE.hi=maxScore;localStorage.setItem('snake.multi.hi',String(STATE.hi))} updateUI()}
+    // Input
+    const keyDirs={'ArrowUp':'UP','ArrowDown':'DOWN','ArrowLeft':'LEFT','ArrowRight':'RIGHT','w':'UP','s':'DOWN','a':'LEFT','d':'RIGHT','W':'UP','S':'DOWN','A':'LEFT','D':'RIGHT'};
+    window.addEventListener('keydown',e=>{
+      if(e.code==='Space'){ STATE.paused=!STATE.paused; updateUI(); return; }
+      const k=e.key; if(!keyDirs[k]) return; const dir=keyDirs[k];
+      if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k) && STATE.snakes[0]) setDir(STATE.snakes[0], dir);
+      else if(STATE.snakes[1]) setDir(STATE.snakes[1], dir);
+    });
 
-    function hitSnake(p){for(const s of STATE.snakes){for(const c of s.body){if(equal(c,p))return true}}return false}
-    function hitHazard(p){for(const h of STATE.haz){if(equal(h,p))return true}return false}
-    function kill(s){s.alive=false}
+    function setDir(snake,dir){ if(OPP[snake.dir]===dir) return; snake.pendingDir=dir; }
 
-    function drawCell(x,y,fill){ctx.fillStyle=fill;ctx.fillRect(x*CFG.cell+1,y*CFG.cell+1,CFG.cell-2,CFG.cell-2)}
-    function draw(){ctx.clearRect(0,0,canvas.width,canvas.height); if(STATE.hazards){for(const h of STATE.haz){const x=h.x*CFG.cell,y=h.y*CFG.cell;ctx.strokeStyle='#ff6b6b';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x+4,y+4);ctx.lineTo(x+CFG.cell-4,y+CFG.cell-4);ctx.moveTo(x+CFG.cell-4,y+4);ctx.lineTo(x+4,y+CFG.cell-4);ctx.stroke()}}
-      for(const f of STATE.foods){drawCell(f.x,f.y,'#ffd166');ctx.strokeStyle='rgba(255,209,102,0.9)';ctx.lineWidth=2;ctx.strokeRect(f.x*CFG.cell+1.5,f.y*CFG.cell+1.5,CFG.cell-3,CFG.cell-3)}
-      for(const s of STATE.snakes){ctx.globalAlpha=s.alive?1:0.4;for(let i=0;i<s.body.length;i++){const c=s.body[i];const shade=i===0?s.color:shadeHex(s.color,-12);drawCell(c.x,c.y,shade)}ctx.globalAlpha=1}
-      for(const s of STATE.snakes){if(!s.alive)continue;const h=s.body[0];ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=2;ctx.strokeRect(h.x*CFG.cell+2,h.y*CFG.cell+2,CFG.cell-4,CFG.cell-4)} }
+    // Step / Update
+    function step(){
+      for(const s of STATE.snakes){ if(!s.alive) continue; s.dir = s.pendingDir; }
 
-    function shadeHex(hex,percent){const v=hex.replace('#','');let r=parseInt(v.slice(0,2),16),g=parseInt(v.slice(2,4),16),b=parseInt(v.slice(4,6),16);const f=x=>clamp(Math.round(x+255*(percent/100)),0,255);r=f(r);g=f(g);b=f(b);return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`}
+      // maybe spawn items
+      if(STATE.items.length < CFG.itemMax && Math.random() < 0.03){ STATE.items.push(newItem(STATE)); }
 
-    function loop(ts){if(!STATE.paused){const interval=1000/CFG.speed;if(ts-STATE.lastStep>=interval){STATE.lastStep=ts;step()}}draw();requestAnimationFrame(loop)}
+      for(const s of STATE.snakes){
+        if(!s.alive) continue;
+        const d=DIRS[s.dir];
+        let next={x:s.body[0].x+d[0], y:s.body[0].y+d[1]};
+        if(CFG.wrap) next = wrapPos(next);
 
-    ui.speed.addEventListener('input',()=>{ui.speedLabel.textContent=ui.speed.value;CFG.speed=Number(ui.speed.value);saveConfig()});
-    ui.cols.addEventListener('change',()=>{CFG.cols=clamp(Number(ui.cols.value),12,64);saveConfig();resizeCanvas();init(STATE.mode)});
-    ui.rows.addEventListener('change',()=>{CFG.rows=clamp(Number(ui.rows.value),10,48);saveConfig();resizeCanvas();init(STATE.mode)});
-    ui.wrap.addEventListener('change',()=>{CFG.wrap=!!ui.wrap.checked;saveConfig()});
-    ui.hazards.addEventListener('change',()=>{CFG.hazards=!!ui.hazards.checked;saveConfig();init(STATE.mode)});
-    ui.foodCount.addEventListener('change',()=>{CFG.foodCount=clamp(Number(ui.foodCount.value),1,10);ui.foodsLabel.textContent=CFG.foodCount;saveConfig();init(STATE.mode)});
-    ui.btnPause.addEventListener('click',()=>{STATE.paused=!STATE.paused;updateUI()});
-    ui.btnRestart.addEventListener('click',()=>{init(STATE.mode)});
-    ui.btnBot.addEventListener('click',()=>{init('BOT')});
-    ui.btnLocal.addEventListener('click',()=>{init('LOCAL')});
+        if(!CFG.wrap && !inBounds(next)) { kill(s); continue; }
+        if(hitSnake(next)) { kill(s); continue; }
+        if(CFG.hazards && hitHazard(next)) { kill(s); continue; }
 
-    resizeCanvas(); ui.speed.value=CFG.speed; ui.speedLabel.textContent=CFG.speed; ui.cols.value=CFG.cols; ui.rows.value=CFG.rows; ui.wrap.checked=CFG.wrap; ui.hazards.checked=CFG.hazards; ui.foodCount.value=CFG.foodCount; ui.foodsLabel.textContent=CFG.foodCount; init('BOT'); requestAnimationFrame(loop);
+        s.body.unshift(next);
+        // Food
+        STATE.foods = STATE.foods.filter(f => {
+          if(equal(next,f)) { s.grow += 2; s.score += 10; return false; }
+          return true;
+        });
+        while(STATE.foods.length < CFG.foodCount) STATE.foods.push(newFood(STATE));
+
+        // Items
+        STATE.items = STATE.items.filter(it => {
+          if(equal(next,it)) { applyItem(it.type, s); return false; }
+          return true;
+        });
+
+        if(s.grow>0) s.grow--; else s.body.pop();
+      }
+
+      const maxScore = Math.max(STATE.snakes[0]?.score||0, STATE.snakes[1]?.score||0);
+      if(maxScore>STATE.hi){ STATE.hi = maxScore; localStorage.setItem('snake.multi.hi', String(STATE.hi)); }
+
+      updateUI();
+    }
+
+    function applyItem(type, snake){
+      if(type==='shrink'){
+        const keep = Math.max(2, Math.ceil(snake.body.length*0.7));
+        snake.body = snake.body.slice(0, keep);
+        snake.grow = Math.max(0, snake.grow - 2);
+      } else if(type==='bonus'){
+        snake.score += 50;
+      } else if(type==='clear'){
+        STATE.haz = [];
+      }
+    }
+
+    function hitSnake(p){ for(const s of STATE.snakes){ for(const c of s.body){ if(equal(c,p)) return true; } } return false; }
+    function hitHazard(p){ for(const h of STATE.haz){ if(equal(h,p)) return true; } return false; }
+    function kill(s){ s.alive=false; }
+
+    // Draw
+    function drawCell(x,y,fill){ ctx.fillStyle=fill; ctx.fillRect(x*CFG.cell+1,y*CFG.cell+1,CFG.cell-2,CFG.cell-2); }
+
+    function draw(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      // Hazards
+      if(STATE.hazards){
+        for(const h of STATE.haz){
+          const x=h.x*CFG.cell, y=h.y*CFG.cell; 
+          ctx.strokeStyle='#ff6b6b'; ctx.lineWidth=3; ctx.beginPath();
+          ctx.moveTo(x+4,y+4); ctx.lineTo(x+CFG.cell-4,y+CFG.cell-4);
+          ctx.moveTo(x+CFG.cell-4,y+4); ctx.lineTo(x+4,y+CFG.cell-4);
+          ctx.stroke();
+        }
+      }
+
+      // Food
+      for(const f of STATE.foods){
+        drawCell(f.x,f.y,'#ffd166');
+        ctx.strokeStyle='rgba(255,209,102,0.9)'; ctx.lineWidth=2;
+        ctx.strokeRect(f.x*CFG.cell+1.5,f.y*CFG.cell+1.5,CFG.cell-3,CFG.cell-3);
+      }
+
+      // Items
+      for(const it of STATE.items){
+        const x=it.x*CFG.cell, y=it.y*CFG.cell;
+        if(it.type==='shrink'){
+          ctx.fillStyle='#b388ff'; ctx.fillRect(x+4,y+4,CFG.cell-8,CFG.cell-8);
+          ctx.strokeStyle='white'; ctx.strokeRect(x+6,y+6,CFG.cell-12,CFG.cell-12);
+        } else if(it.type==='bonus'){
+          ctx.fillStyle='#4dd0e1'; ctx.beginPath(); ctx.arc(x+CFG.cell/2,y+CFG.cell/2,CFG.cell*0.35,0,Math.PI*2); ctx.fill();
+          ctx.strokeStyle='white'; ctx.beginPath(); ctx.moveTo(x+CFG.cell/2, y+6); ctx.lineTo(x+CFG.cell/2, y+CFG.cell-6); ctx.stroke();
+        } else if(it.type==='clear'){
+          ctx.fillStyle='#ffcccb'; ctx.fillRect(x+4,y+4,CFG.cell-8,CFG.cell-8);
+          ctx.strokeStyle='#333'; ctx.beginPath(); ctx.moveTo(x+6,y+CFG.cell-6); ctx.lineTo(x+CFG.cell-6,y+6); ctx.stroke();
+        }
+      }
+
+      // Snakes
+      for(const s of STATE.snakes){
+        ctx.globalAlpha = s.alive?1:0.4;
+        for(let i=0;i<s.body.length;i++){
+          const c = s.body[i];
+          const shade = i===0 ? s.color : shadeHex(s.color, -12);
+          drawCell(c.x, c.y, shade);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // Head highlight
+      for(const s of STATE.snakes){ if(!s.alive) continue; const h=s.body[0]; ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=2; ctx.strokeRect(h.x*CFG.cell+2,h.y*CFG.cell+2,CFG.cell-4,CFG.cell-4); }
+    }
+
+    function shadeHex(hex,percent){
+      const v=hex.replace('#',''); let r=parseInt(v.slice(0,2),16), g=parseInt(v.slice(2,4),16), b=parseInt(v.slice(4,6),16);
+      const f=x=>clamp(Math.round(x+255*(percent/100)),0,255); r=f(r); g=f(g); b=f(b);
+      return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+    }
+
+    // Main loop
+    function loop(ts){
+      if(!STATE.paused){
+        const interval=1000/CFG.speed;
+        if(ts-STATE.lastStep>=interval){ STATE.lastStep=ts; step(); }
+      }
+      draw(); requestAnimationFrame(loop);
+    }
+
+    // UI
+    ui.speed.addEventListener('input',()=>{ ui.speedLabel.textContent=ui.speed.value; CFG.speed=Number(ui.speed.value); saveConfig(); });
+    ui.cols.addEventListener('change',()=>{ CFG.cols=clamp(Number(ui.cols.value),12,64); saveConfig(); resizeCanvas(); init(STATE.mode); });
+    ui.rows.addEventListener('change',()=>{ CFG.rows=clamp(Number(ui.rows.value),10,48); saveConfig(); resizeCanvas(); init(STATE.mode); });
+    ui.wrap.addEventListener('change',()=>{ CFG.wrap=!!ui.wrap.checked; saveConfig(); });
+    ui.hazards.addEventListener('change',()=>{ CFG.hazards=!!ui.hazards.checked; saveConfig(); init(STATE.mode); });
+    ui.foodCount.addEventListener('change',()=>{ CFG.foodCount=clamp(Number(ui.foodCount.value),1,10); ui.foodsLabel.textContent=CFG.foodCount; saveConfig(); init(STATE.mode); });
+    ui.itemMax.addEventListener('change',()=>{ CFG.itemMax=clamp(Number(ui.itemMax.value),0,6); saveConfig(); });
+
+    ui.btnPause.addEventListener('click',()=>{ STATE.paused=!STATE.paused; updateUI(); });
+    ui.btnRestart.addEventListener('click',()=>{ init(STATE.mode); });
+    ui.btnSingle.addEventListener('click',()=>{ init('SINGLE'); });
+    ui.btnLocal.addEventListener('click',()=>{ init('LOCAL'); });
+
+    // Init
+    resizeCanvas();
+    ui.speed.value=CFG.speed; ui.speedLabel.textContent=CFG.speed; ui.cols.value=CFG.cols; ui.rows.value=CFG.rows; ui.wrap.checked=CFG.wrap; ui.hazards.checked=CFG.hazards; ui.foodCount.value=CFG.foodCount; ui.foodsLabel.textContent=CFG.foodCount; ui.itemMax.value=CFG.itemMax;
+    init('SINGLE'); requestAnimationFrame(loop);
   })();
   </script>
 </body>
