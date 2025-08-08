@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multiplayer Snake – Bot & Local Versus</title>
+  <title>Multiplayer Snake – Sidebar, No Center Box</title>
   <style>
     :root {
       --bg: #0f1220;
@@ -16,7 +16,7 @@
       --grid: #1e2442;
     }
     * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; background: radial-gradient(1200px 800px at 70% 10%, #1a1f35 0%, var(--bg) 60%); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
+    html, body { height: 100%; margin: 0; background: radial-gradient(1200px 800px at 70% 10%, #1a1f35 0%, var(--bg) 60%); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans"; }
     .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 16px; height: 100%; padding: 16px; }
     .panel { background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.35), inset 0 -50px 100px rgba(255,255,255,0.02); }
     h1 { font-size: 22px; margin: 8px 0 12px; letter-spacing: 0.2px; }
@@ -36,12 +36,6 @@
     canvas { background: repeating-linear-gradient(0deg, var(--grid), var(--grid) 1px, transparent 1px, transparent 24px),
               repeating-linear-gradient(90deg, var(--grid), var(--grid) 1px, transparent 1px, transparent 24px),
               linear-gradient(180deg, #0b0e1a, #0c1021); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 12px 40px rgba(0,0,0,0.45); }
-    .overlay { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
-    .card { pointer-events: auto; background: var(--panel); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px; min-width: 280px; box-shadow: 0 16px 60px rgba(0,0,0,0.55); }
-    .card h3 { margin: 0 0 10px; }
-    .center { text-align: center; }
-    .keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
-    .kbd { border: 1px solid rgba(255,255,255,0.12); background: #141830; border-radius: 8px; padding: 6px 8px; text-align: center; font-weight: 600; }
 
     @media (max-width: 960px){ .wrap { grid-template-columns: 1fr; } }
   </style>
@@ -84,34 +78,19 @@
       <label>
         <input type="checkbox" id="hazards" /> Random hazards
       </label>
-      <p class="small">Changes apply on restart.</p>
+      <p class="small">Overlay messages are disabled per your request.</p>
 
       <h2>Controls</h2>
-      <div class="card">
-        <div class="kv">
-          <div>P1</div><div>Arrow Keys</div>
-          <div>P2</div><div>W A S D</div>
-          <div>Pause</div><div>Space / ⏯️</div>
-        </div>
-        <div class="keys">
-          <div class="kbd">↑</div><div class="kbd">↓</div><div class="kbd">←</div><div class="kbd">→</div>
-          <div class="kbd">W</div><div class="kbd">S</div><div class="kbd">A</div><div class="kbd">D</div>
-        </div>
+      <div class="kv">
+        <div>P1</div><div>Arrow Keys</div>
+        <div>P2</div><div>W A S D</div>
+        <div>Pause</div><div>Space / ⏯️</div>
       </div>
-
-      <h2>Notes</h2>
-      <p class="small">This build supports vs Bot and local 2‑player. Want online play? I can wire up WebRTC (copy‑paste signaling) or a tiny Node/WebSocket lobby.</p>
     </aside>
 
     <main class="gameWrap">
       <canvas id="game" width="672" height="528" aria-label="Snake game canvas" role="img"></canvas>
-      <div class="overlay" id="overlay" hidden>
-        <div class="card center">
-          <h3 id="overlayTitle">Paused</h3>
-          <p id="overlayBody">Press Space or tap ⏯️ to continue.</p>
-          <button class="btn" id="overlayBtn">Resume</button>
-        </div>
-      </div>
+      <!-- Overlay removed to keep center clean -->
     </main>
   </div>
 
@@ -135,10 +114,6 @@
       rows: document.getElementById('rows'),
       wrap: document.getElementById('wrap'),
       hazards: document.getElementById('hazards'),
-      overlay: document.getElementById('overlay'),
-      overlayTitle: document.getElementById('overlayTitle'),
-      overlayBody: document.getElementById('overlayBody'),
-      overlayBtn: document.getElementById('overlayBtn'),
       btnPause: document.getElementById('btnPause'),
       btnRestart: document.getElementById('btnRestart'),
       btnBot: document.getElementById('btnBot'),
@@ -159,7 +134,6 @@
       hazards: !!store.hazards,
     };
 
-    // Scale canvas to grid
     function resizeCanvas(){
       canvas.width = CFG.cols * CFG.cell;
       canvas.height = CFG.rows * CFG.cell;
@@ -249,9 +223,6 @@
       ui.sb2.textContent = STATE.snakes[1].score;
       ui.hi.textContent = STATE.hi;
       ui.speedLabel.textContent = CFG.speed;
-      ui.overlay.hidden = !(STATE.paused || STATE.over);
-      ui.overlayTitle.textContent = STATE.over ? 'Game Over' : 'Paused';
-      ui.overlayBody.textContent = STATE.over ? 'Press 🔁 Restart to play again.' : 'Press Space or tap ⏯️ to continue.';
       ui.btnPause.textContent = STATE.paused ? '▶️ Resume' : '⏸️ Pause';
       ui.btnPause.setAttribute('aria-pressed', STATE.paused);
       ui.btnRestart.disabled = false;
@@ -268,7 +239,6 @@
       const k = e.key;
       if(!keyDirs[k]) return;
       const dir = keyDirs[k];
-      // Map P1 (arrows) vs P2 (WASD)
       if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k)) setDir(STATE.snakes[0], dir);
       else setDir(STATE.snakes[1], dir);
     });
@@ -278,7 +248,7 @@
       snake.pendingDir = dir;
     }
 
-    // --- Bot AI (greedy + simple hazard avoidance)
+    // --- Bot AI
     function botThink(state){
       const bot = state.snakes[1];
       if(!bot.alive) return;
@@ -291,20 +261,18 @@
         if(CFG.wrap) np = wrapPos(np);
         return np;
       }
-      // Consider 4 dirs, score by manhattan distance, punish collisions
       for(const dir of ['UP','DOWN','LEFT','RIGHT']){
-        if(OPP[bot.dir]===dir) continue; // no reverse
+        if(OPP[bot.dir]===dir) continue;
         const np = nextPos(dir);
         let bad = false;
         if(!CFG.wrap && !inBounds(np)) bad = true;
         if(!bad){
-          // Check snake bodies
           for(const s of state.snakes){ for(const c of s.body){ if(equal(c,np)) { bad=true; break; } }
             if(bad) break; }
           if(!bad && state.hazards){ for(const h of state.haz){ if(equal(h,np)) { bad=true; break; } } }
         }
         const md = Math.abs(np.x - target.x) + Math.abs(np.y - target.y);
-        const score = bad ? 1e9 : md + Math.random()*0.2; // slight noise to avoid ties
+        const score = bad ? 1e9 : md + Math.random()*0.2;
         choices.push({dir, score});
       }
       choices.sort((a,b)=>a.score-b.score);
@@ -313,7 +281,6 @@
 
     // --- Tick / Update
     function step(){
-      // One logic tick (move snakes, collisions, scoring)
       for(const s of STATE.snakes){ if(!s.alive) continue; s.dir = s.pendingDir; }
       if(STATE.mode==='BOT') botThink(STATE);
 
@@ -336,10 +303,8 @@
         if(s.grow>0) s.grow--; else s.body.pop();
       }
 
-      // If both dead -> game over
-      if(STATE.snakes.every(s=>!s.alive)) endGame();
+      if(STATE.snakes.every(s=>!s.alive)) { STATE.paused = true; }
 
-      // Update highscore
       const maxScore = Math.max(STATE.snakes[0].score, STATE.snakes[1].score);
       if(maxScore>STATE.hi){ STATE.hi = maxScore; localStorage.setItem('snake.multi.hi', String(STATE.hi)); }
 
@@ -357,8 +322,6 @@
 
     function kill(s){ s.alive = false; }
 
-    function endGame(){ STATE.over = true; STATE.paused = true; updateUI(); }
-
     // --- Draw
     function drawCell(x,y,fill){
       ctx.fillStyle = fill;
@@ -367,16 +330,13 @@
     function draw(){
       ctx.clearRect(0,0,canvas.width, canvas.height);
 
-      // Hazards
       if(STATE.hazards){
         for(const h of STATE.haz) drawCell(h.x, h.y, '#2a335c');
       }
 
-      // Food (soft glow)
       const f = STATE.food; 
       drawCell(f.x, f.y, '#ffd166');
 
-      // Snakes
       for(const s of STATE.snakes){
         ctx.globalAlpha = s.alive?1:0.4;
         for(let i=0;i<s.body.length;i++){
@@ -387,7 +347,6 @@
         ctx.globalAlpha = 1;
       }
 
-      // Grid highlight on heads
       for(const s of STATE.snakes){
         if(!s.alive) continue;
         const h = s.body[0];
@@ -407,7 +366,7 @@
     // --- Main Loop
     let rafId;
     function loop(ts){
-      if(!STATE.paused && !STATE.over){
+      if(!STATE.paused){
         const interval = 1000/CFG.speed;
         if(ts - STATE.lastStep >= interval){
           STATE.lastStep = ts;
@@ -429,7 +388,6 @@
     ui.btnRestart.addEventListener('click', ()=>{ init(STATE.mode); });
     ui.btnBot.addEventListener('click', ()=>{ init('BOT'); });
     ui.btnLocal.addEventListener('click', ()=>{ init('LOCAL'); });
-    ui.overlayBtn.addEventListener('click', ()=>{ STATE.paused=false; updateUI(); });
 
     // --- Init & Go
     resizeCanvas();
