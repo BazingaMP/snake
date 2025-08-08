@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multiplayer Snake – Sidebar, No Center Box</title>
+  <title>Multiplayer Snake – Sidebar, No Center Box, Multi‑Food</title>
   <style>
     :root {
       --bg: #0f1220;
@@ -28,7 +28,7 @@
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .small { font-size: 12px; color: var(--muted); }
     label { display: grid; gap: 6px; font-size: 13px; }
-    input[type="range"] { width: 100%; }
+    input[type="range"], input[type="number"] { width: 100%; }
     .kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; }
     .kv div:nth-child(odd){ color: var(--muted); }
 
@@ -50,6 +50,7 @@
         <div>Score P2/Bot</div><div id="score2">0</div>
         <div>Highscore</div><div id="hi">0</div>
         <div>Speed</div><div><span id="speedLabel">10</span> ticks/s</div>
+        <div>Foods</div><div id="foodsLabel">4</div>
       </div>
 
       <h2>Play</h2>
@@ -78,19 +79,21 @@
       <label>
         <input type="checkbox" id="hazards" /> Random hazards
       </label>
-      <p class="small">Overlay messages are disabled per your request.</p>
+      <label>Food count
+        <input type="number" id="foodCount" min="1" max="10" value="4" />
+      </label>
+      <p class="small">Center overlay is removed. Space = pause. P1: Arrows, P2: WASD.</p>
 
-      <h2>Controls</h2>
-      <div class="kv">
-        <div>P1</div><div>Arrow Keys</div>
-        <div>P2</div><div>W A S D</div>
-        <div>Pause</div><div>Space / ⏯️</div>
+      <h2>Legend</h2>
+      <div class="kv small">
+        <div>🍋 Food</div><div>Yellow square with outline</div>
+        <div>☠️ Hazard</div><div>Red X (don’t touch)</div>
       </div>
     </aside>
 
     <main class="gameWrap">
       <canvas id="game" width="672" height="528" aria-label="Snake game canvas" role="img"></canvas>
-      <!-- Overlay removed to keep center clean -->
+      <!-- No center overlay per request -->
     </main>
   </div>
 
@@ -114,6 +117,8 @@
       rows: document.getElementById('rows'),
       wrap: document.getElementById('wrap'),
       hazards: document.getElementById('hazards'),
+      foodCount: document.getElementById('foodCount'),
+      foodsLabel: document.getElementById('foodsLabel'),
       btnPause: document.getElementById('btnPause'),
       btnRestart: document.getElementById('btnRestart'),
       btnBot: document.getElementById('btnBot'),
@@ -121,7 +126,7 @@
     };
 
     // Persistence
-    const storageKey = 'snake.multi.v1';
+    const storageKey = 'snake.multi.v2';
     const store = JSON.parse(localStorage.getItem(storageKey) || '{}');
 
     // Config
@@ -132,8 +137,16 @@
       speed: Number(store.speed) || 10, // ticks per second
       wrap: store.wrap !== undefined ? !!store.wrap : true,
       hazards: !!store.hazards,
+      foodCount: Number(store.foodCount) || 4,
     };
 
+    function saveConfig(){
+      localStorage.setItem(storageKey, JSON.stringify({
+        cols: CFG.cols, rows: CFG.rows, speed: CFG.speed, wrap: CFG.wrap, hazards: CFG.hazards, foodCount: CFG.foodCount
+      }));
+    }
+
+    // Scale canvas to grid
     function resizeCanvas(){
       canvas.width = CFG.cols * CFG.cell;
       canvas.height = CFG.rows * CFG.cell;
@@ -148,22 +161,24 @@
     }
 
     function newFood(state){
-      let p;
-      do { p = {x:rnd(state.cols), y:rnd(state.rows)}; } while(collisionAt(state, p));
+      let p; let tries = 0;
+      do { p = {x:rnd(state.cols), y:rnd(state.rows)}; tries++; if(tries>1000) break; }
+      while(collisionAt(state, p));
       return p;
     }
 
     function newHazards(state, count){
       const hz = [];
       for(let i=0;i<count;i++){
-        let p;
-        do { p = {x:rnd(state.cols), y:rnd(state.rows)}; } while(collisionAt(state, p) || equal(p, state.food));
+        let p; let tries=0;
+        do { p = {x:rnd(state.cols), y:rnd(state.rows)}; tries++; if(tries>1000) break; }
+        while(collisionAt(state, p));
         hz.push(p);
       }
       return hz;
     }
 
-    function equal(a,b){ return a.x===b.x && a.y===b.y; }
+    function equal(a,b){ return a && b && a.x===b.x && a.y===b.y; }
 
     function wrapPos(p){
       return { x:(p.x+CFG.cols)%CFG.cols, y:(p.y+CFG.rows)%CFG.rows };
@@ -178,6 +193,7 @@
         for(const c of s.body){ if(equal(c,p)) return true; }
       }
       if(state.hazards) for(const h of state.haz){ if(equal(h,p)) return true; }
+      if(state.foods) for(const f of state.foods){ if(equal(f,p)) return true; }
       return false;
     }
 
@@ -191,6 +207,8 @@
       CFG.rows = clamp(Number(ui.rows.value), 10, 48);
       CFG.wrap = !!ui.wrap.checked;
       CFG.hazards = !!ui.hazards.checked;
+      CFG.foodCount = clamp(Number(ui.foodCount.value), 1, 10);
+      saveConfig();
       resizeCanvas();
 
       const s1 = newSnake('P1', '#7cf49a', {x:Math.floor(CFG.cols*0.25), y:Math.floor(CFG.rows/2)}, 'RIGHT');
@@ -198,8 +216,8 @@
       STATE = {
         cols: CFG.cols, rows: CFG.rows,
         snakes: [s1, s2],
-        food: newFood({cols:CFG.cols, rows:CFG.rows, snakes:[s1,s2]}),
-        haz: CFG.hazards ? newHazards({cols:CFG.cols, rows:CFG.rows, snakes:[s1,s2]}, Math.floor((CFG.cols*CFG.rows)/180)) : [],
+        foods: [],
+        haz: CFG.hazards ? newHazards({cols:CFG.cols, rows:CFG.rows, snakes:[s1,s2], foods:[]}, Math.floor((CFG.cols*CFG.rows)/180)) : [],
         hazards: CFG.hazards,
         mode,
         paused: false,
@@ -208,13 +226,9 @@
         lastStep: 0,
         hi: Number(localStorage.getItem('snake.multi.hi')||0)
       };
+      // spawn multiple foods
+      for(let i=0;i<CFG.foodCount;i++) STATE.foods.push(newFood(STATE));
       updateUI();
-    }
-
-    function saveConfig(){
-      localStorage.setItem(storageKey, JSON.stringify({
-        cols: CFG.cols, rows: CFG.rows, speed: CFG.speed, wrap: CFG.wrap, hazards: CFG.hazards
-      }));
     }
 
     function updateUI(){
@@ -223,9 +237,9 @@
       ui.sb2.textContent = STATE.snakes[1].score;
       ui.hi.textContent = STATE.hi;
       ui.speedLabel.textContent = CFG.speed;
+      ui.foodsLabel.textContent = CFG.foodCount;
       ui.btnPause.textContent = STATE.paused ? '▶️ Resume' : '⏸️ Pause';
       ui.btnPause.setAttribute('aria-pressed', STATE.paused);
-      ui.btnRestart.disabled = false;
       document.getElementById('modeName').style.color = STATE.mode==='BOT' ? '#f7d774' : '#6ea8fe';
     }
 
@@ -248,12 +262,18 @@
       snake.pendingDir = dir;
     }
 
-    // --- Bot AI
+    // --- Bot AI (greedy to nearest food + hazard avoidance)
     function botThink(state){
       const bot = state.snakes[1];
       if(!bot.alive) return;
       const head = bot.body[0];
-      const target = state.food;
+      // nearest food
+      let target = state.foods[0];
+      let best = Infinity;
+      for(const f of state.foods){
+        const d = Math.abs(head.x - f.x) + Math.abs(head.y - f.y);
+        if(d < best){ best = d; target = f; }
+      }
       const choices = [];
       function nextPos(dir){
         const d = DIRS[dir];
@@ -262,7 +282,7 @@
         return np;
       }
       for(const dir of ['UP','DOWN','LEFT','RIGHT']){
-        if(OPP[bot.dir]===dir) continue;
+        if(OPP[bot.dir]===dir) continue; // no reverse
         const np = nextPos(dir);
         let bad = false;
         if(!CFG.wrap && !inBounds(np)) bad = true;
@@ -272,7 +292,7 @@
           if(!bad && state.hazards){ for(const h of state.haz){ if(equal(h,np)) { bad=true; break; } } }
         }
         const md = Math.abs(np.x - target.x) + Math.abs(np.y - target.y);
-        const score = bad ? 1e9 : md + Math.random()*0.2;
+        const score = bad ? 1e9 : md + Math.random()*0.2; // slight noise to avoid ties
         choices.push({dir, score});
       }
       choices.sort((a,b)=>a.score-b.score);
@@ -295,16 +315,23 @@
         if(CFG.hazards && hitHazard(next)) { kill(s); continue; }
 
         s.body.unshift(next);
-        if(equal(next, STATE.food)){
-          s.grow += 2;
-          s.score += 10;
-          STATE.food = newFood(STATE);
-        }
+        let ate = false;
+        // eat any overlapping food; support multiple foods
+        STATE.foods = STATE.foods.filter(f => {
+          if(equal(next,f)){
+            s.grow += 2;
+            s.score += 10;
+            ate = true; return false;
+          }
+          return true;
+        });
+        // respawn eaten food(s)
+        while(STATE.foods.length < CFG.foodCount) STATE.foods.push(newFood(STATE));
+
         if(s.grow>0) s.grow--; else s.body.pop();
       }
 
-      if(STATE.snakes.every(s=>!s.alive)) { STATE.paused = true; }
-
+      // Update highscore
       const maxScore = Math.max(STATE.snakes[0].score, STATE.snakes[1].score);
       if(maxScore>STATE.hi){ STATE.hi = maxScore; localStorage.setItem('snake.multi.hi', String(STATE.hi)); }
 
@@ -327,16 +354,32 @@
       ctx.fillStyle = fill;
       ctx.fillRect(x*CFG.cell+1, y*CFG.cell+1, CFG.cell-2, CFG.cell-2);
     }
+
     function draw(){
       ctx.clearRect(0,0,canvas.width, canvas.height);
 
+      // Hazards: draw as red X, clearly distinct from food
       if(STATE.hazards){
-        for(const h of STATE.haz) drawCell(h.x, h.y, '#2a335c');
+        for(const h of STATE.haz){
+          const x = h.x*CFG.cell, y = h.y*CFG.cell; 
+          ctx.strokeStyle = '#ff6b6b';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(x+4, y+4); ctx.lineTo(x+CFG.cell-4, y+CFG.cell-4);
+          ctx.moveTo(x+CFG.cell-4, y+4); ctx.lineTo(x+4, y+CFG.cell-4);
+          ctx.stroke();
+        }
       }
 
-      const f = STATE.food; 
-      drawCell(f.x, f.y, '#ffd166');
+      // Food: yellow with subtle outline
+      for(const f of STATE.foods){
+        drawCell(f.x, f.y, '#ffd166');
+        ctx.strokeStyle = 'rgba(255, 209, 102, 0.9)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(f.x*CFG.cell+1.5, f.y*CFG.cell+1.5, CFG.cell-3, CFG.cell-3);
+      }
 
+      // Snakes
       for(const s of STATE.snakes){
         ctx.globalAlpha = s.alive?1:0.4;
         for(let i=0;i<s.body.length;i++){
@@ -347,6 +390,7 @@
         ctx.globalAlpha = 1;
       }
 
+      // Head highlight
       for(const s of STATE.snakes){
         if(!s.alive) continue;
         const h = s.body[0];
@@ -360,11 +404,10 @@
       const v = hex.replace('#','');
       const r = parseInt(v.slice(0,2),16), g = parseInt(v.slice(2,4),16), b = parseInt(v.slice(4,6),16);
       const f = (x)=> clamp(Math.round(x + 255*(percent/100)), 0, 255);
-      return `#${f(r).toString(16).padStart(2,'0')}${f(g).toString(16).padStart(2,'0')}${f(b).toString(16).padStart(2,'0')}`;
+      return `#${f(r).toString(16).padStart(2,'0')}${f(g).toString(16).padStart(2,'0')}${f(b).toString(16,'0')}`.replace('NaN','00');
     }
 
     // --- Main Loop
-    let rafId;
     function loop(ts){
       if(!STATE.paused){
         const interval = 1000/CFG.speed;
@@ -374,15 +417,16 @@
         }
       }
       draw();
-      rafId = requestAnimationFrame(loop);
+      requestAnimationFrame(loop);
     }
 
     // --- UI Events
     ui.speed.addEventListener('input', ()=>{ ui.speedLabel.textContent = ui.speed.value; CFG.speed = Number(ui.speed.value); saveConfig(); });
-    ui.cols.addEventListener('change', ()=>{ saveConfig(); });
-    ui.rows.addEventListener('change', ()=>{ saveConfig(); });
-    ui.wrap.addEventListener('change', ()=>{ saveConfig(); });
-    ui.hazards.addEventListener('change', ()=>{ saveConfig(); });
+    ui.cols.addEventListener('change', ()=>{ CFG.cols = clamp(Number(ui.cols.value),12,64); saveConfig(); resizeCanvas(); });
+    ui.rows.addEventListener('change', ()=>{ CFG.rows = clamp(Number(ui.rows.value),10,48); saveConfig(); resizeCanvas(); });
+    ui.wrap.addEventListener('change', ()=>{ CFG.wrap = !!ui.wrap.checked; saveConfig(); });
+    ui.hazards.addEventListener('change', ()=>{ CFG.hazards = !!ui.hazards.checked; saveConfig(); init(STATE.mode); });
+    ui.foodCount.addEventListener('change', ()=>{ CFG.foodCount = clamp(Number(ui.foodCount.value),1,10); ui.foodsLabel.textContent = CFG.foodCount; saveConfig(); init(STATE.mode); });
 
     ui.btnPause.addEventListener('click', ()=>{ STATE.paused = !STATE.paused; updateUI(); });
     ui.btnRestart.addEventListener('click', ()=>{ init(STATE.mode); });
@@ -392,7 +436,7 @@
     // --- Init & Go
     resizeCanvas();
     ui.speed.value = CFG.speed; ui.speedLabel.textContent = CFG.speed;
-    ui.cols.value = CFG.cols; ui.rows.value = CFG.rows; ui.wrap.checked = CFG.wrap; ui.hazards.checked = CFG.hazards;
+    ui.cols.value = CFG.cols; ui.rows.value = CFG.rows; ui.wrap.checked = CFG.wrap; ui.hazards.checked = CFG.hazards; ui.foodCount.value = CFG.foodCount; ui.foodsLabel.textContent = CFG.foodCount;
     init('BOT');
     loop(0);
   })();
