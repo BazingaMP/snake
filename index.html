@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multiplayer Snake – Bot & Local Versus</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #1b2038;
+      --accent: #7cf49a;
+      --accent2: #6ea8fe;
+      --danger: #ff6b6b;
+      --text: #e9ecf1;
+      --muted: #9aa4b2;
+      --grid: #1e2442;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: radial-gradient(1200px 800px at 70% 10%, #1a1f35 0%, var(--bg) 60%); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
+    .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 16px; height: 100%; padding: 16px; }
+    .panel { background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.35), inset 0 -50px 100px rgba(255,255,255,0.02); }
+    h1 { font-size: 22px; margin: 8px 0 12px; letter-spacing: 0.2px; }
+    h2 { font-size: 14px; margin: 14px 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
+    .btn { appearance: none; border: 1px solid rgba(255,255,255,0.12); background: #121427; color: var(--text); padding: 10px 12px; border-radius: 12px; cursor: pointer; transition: 120ms transform, 120ms background, 120ms border-color; font-weight: 600; width: 100%; text-align: left; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+    .btn:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.2); }
+    .btn.primary { background: linear-gradient(180deg, rgba(124,244,154,0.18), rgba(124,244,154,0.08)); border-color: rgba(124,244,154,0.35); }
+    .btn.danger { background: linear-gradient(180deg, rgba(255,107,107,0.18), rgba(255,107,107,0.08)); border-color: rgba(255,107,107,0.35); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .small { font-size: 12px; color: var(--muted); }
+    label { display: grid; gap: 6px; font-size: 13px; }
+    input[type="range"] { width: 100%; }
+    .kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; }
+    .kv div:nth-child(odd){ color: var(--muted); }
+
+    .gameWrap { position: relative; display: grid; place-items: center; }
+    canvas { background: repeating-linear-gradient(0deg, var(--grid), var(--grid) 1px, transparent 1px, transparent 24px),
+              repeating-linear-gradient(90deg, var(--grid), var(--grid) 1px, transparent 1px, transparent 24px),
+              linear-gradient(180deg, #0b0e1a, #0c1021); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 12px 40px rgba(0,0,0,0.45); }
+    .overlay { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+    .card { pointer-events: auto; background: var(--panel); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px; min-width: 280px; box-shadow: 0 16px 60px rgba(0,0,0,0.55); }
+    .card h3 { margin: 0 0 10px; }
+    .center { text-align: center; }
+    .keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+    .kbd { border: 1px solid rgba(255,255,255,0.12); background: #141830; border-radius: 8px; padding: 6px 8px; text-align: center; font-weight: 600; }
+
+    @media (max-width: 960px){ .wrap { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <aside class="panel">
+      <h1>🐍 Multiplayer Snake</h1>
+      <div class="kv" id="scoreboard">
+        <div>Mode</div><div id="modeName">—</div>
+        <div>Score P1</div><div id="score1">0</div>
+        <div>Score P2/Bot</div><div id="score2">0</div>
+        <div>Highscore</div><div id="hi">0</div>
+        <div>Speed</div><div><span id="speedLabel">10</span> ticks/s</div>
+      </div>
+
+      <h2>Play</h2>
+      <div class="row">
+        <button class="btn primary" id="btnBot">🚀 vs Bot</button>
+        <button class="btn" id="btnLocal">🎮 Local Versus</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="btnPause">⏯️ Pause</button>
+        <button class="btn danger" id="btnRestart">🔁 Restart</button>
+      </div>
+
+      <h2>Settings</h2>
+      <label>Speed
+        <input type="range" id="speed" min="5" max="25" step="1" value="10"/>
+      </label>
+      <label>Board Size
+        <div class="row">
+          <input type="number" id="cols" min="12" max="64" value="28"/>
+          <input type="number" id="rows" min="10" max="48" value="22"/>
+        </div>
+      </label>
+      <label>
+        <input type="checkbox" id="wrap" checked /> Wrap walls (classic)
+      </label>
+      <label>
+        <input type="checkbox" id="hazards" /> Random hazards
+      </label>
+      <p class="small">Changes apply on restart.</p>
+
+      <h2>Controls</h2>
+      <div class="card">
+        <div class="kv">
+          <div>P1</div><div>Arrow Keys</div>
+          <div>P2</div><div>W A S D</div>
+          <div>Pause</div><div>Space / ⏯️</div>
+        </div>
+        <div class="keys">
+          <div class="kbd">↑</div><div class="kbd">↓</div><div class="kbd">←</div><div class="kbd">→</div>
+          <div class="kbd">W</div><div class="kbd">S</div><div class="kbd">A</div><div class="kbd">D</div>
+        </div>
+      </div>
+
+      <h2>Notes</h2>
+      <p class="small">This build supports vs Bot and local 2‑player. Want online play? I can wire up WebRTC (copy‑paste signaling) or a tiny Node/WebSocket lobby.</p>
+    </aside>
+
+    <main class="gameWrap">
+      <canvas id="game" width="672" height="528" aria-label="Snake game canvas" role="img"></canvas>
+      <div class="overlay" id="overlay" hidden>
+        <div class="card center">
+          <h3 id="overlayTitle">Paused</h3>
+          <p id="overlayBody">Press Space or tap ⏯️ to continue.</p>
+          <button class="btn" id="overlayBtn">Resume</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+  (() => {
+    // --- Utility
+    const rnd = (n) => Math.floor(Math.random()*n);
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+    // --- Game State
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const ui = {
+      sbMode: document.getElementById('modeName'),
+      sb1: document.getElementById('score1'),
+      sb2: document.getElementById('score2'),
+      hi: document.getElementById('hi'),
+      speed: document.getElementById('speed'),
+      speedLabel: document.getElementById('speedLabel'),
+      cols: document.getElementById('cols'),
+      rows: document.getElementById('rows'),
+      wrap: document.getElementById('wrap'),
+      hazards: document.getElementById('hazards'),
+      overlay: document.getElementById('overlay'),
+      overlayTitle: document.getElementById('overlayTitle'),
+      overlayBody: document.getElementById('overlayBody'),
+      overlayBtn: document.getElementById('overlayBtn'),
+      btnPause: document.getElementById('btnPause'),
+      btnRestart: document.getElementById('btnRestart'),
+      btnBot: document.getElementById('btnBot'),
+      btnLocal: document.getElementById('btnLocal'),
+    };
+
+    // Persistence
+    const storageKey = 'snake.multi.v1';
+    const store = JSON.parse(localStorage.getItem(storageKey) || '{}');
+
+    // Config
+    let CFG = {
+      cols: Number(store.cols) || 28,
+      rows: Number(store.rows) || 22,
+      cell: 24,
+      speed: Number(store.speed) || 10, // ticks per second
+      wrap: store.wrap !== undefined ? !!store.wrap : true,
+      hazards: !!store.hazards,
+    };
+
+    // Scale canvas to grid
+    function resizeCanvas(){
+      canvas.width = CFG.cols * CFG.cell;
+      canvas.height = CFG.rows * CFG.cell;
+    }
+
+    // Entities
+    const DIRS = { UP:[0,-1], DOWN:[0,1], LEFT:[-1,0], RIGHT:[1,0] };
+    const OPP = { UP:'DOWN', DOWN:'UP', LEFT:'RIGHT', RIGHT:'LEFT' };
+
+    function newSnake(id, color, start, dir){
+      return { id, color, body:[start], dir, pendingDir: dir, grow: 2, alive:true, score:0 };
+    }
+
+    function newFood(state){
+      let p;
+      do { p = {x:rnd(state.cols), y:rnd(state.rows)}; } while(collisionAt(state, p));
+      return p;
+    }
+
+    function newHazards(state, count){
+      const hz = [];
+      for(let i=0;i<count;i++){
+        let p;
+        do { p = {x:rnd(state.cols), y:rnd(state.rows)}; } while(collisionAt(state, p) || equal(p, state.food));
+        hz.push(p);
+      }
+      return hz;
+    }
+
+    function equal(a,b){ return a.x===b.x && a.y===b.y; }
+
+    function wrapPos(p){
+      return { x:(p.x+CFG.cols)%CFG.cols, y:(p.y+CFG.rows)%CFG.rows };
+    }
+
+    function inBounds(p){
+      return p.x>=0 && p.x<CFG.cols && p.y>=0 && p.y<CFG.rows;
+    }
+
+    function collisionAt(state, p){
+      for(const s of state.snakes){
+        for(const c of s.body){ if(equal(c,p)) return true; }
+      }
+      if(state.hazards) for(const h of state.haz){ if(equal(h,p)) return true; }
+      return false;
+    }
+
+    // --- Game Lifecycle
+    let STATE = {};
+    const MODES = { BOT:'vs Bot', LOCAL:'Local Versus' };
+
+    function init(mode='BOT'){
+      CFG.speed = clamp(Number(ui.speed.value), 5, 25);
+      CFG.cols = clamp(Number(ui.cols.value), 12, 64);
+      CFG.rows = clamp(Number(ui.rows.value), 10, 48);
+      CFG.wrap = !!ui.wrap.checked;
+      CFG.hazards = !!ui.hazards.checked;
+      resizeCanvas();
+
+      const s1 = newSnake('P1', '#7cf49a', {x:Math.floor(CFG.cols*0.25), y:Math.floor(CFG.rows/2)}, 'RIGHT');
+      const s2 = newSnake(mode==='BOT'?'BOT':'P2', mode==='BOT'?'#f7d774':'#6ea8fe', {x:Math.floor(CFG.cols*0.75), y:Math.floor(CFG.rows/2)}, 'LEFT');
+      STATE = {
+        cols: CFG.cols, rows: CFG.rows,
+        snakes: [s1, s2],
+        food: newFood({cols:CFG.cols, rows:CFG.rows, snakes:[s1,s2]}),
+        haz: CFG.hazards ? newHazards({cols:CFG.cols, rows:CFG.rows, snakes:[s1,s2]}, Math.floor((CFG.cols*CFG.rows)/180)) : [],
+        hazards: CFG.hazards,
+        mode,
+        paused: false,
+        over: false,
+        tick: 0,
+        lastStep: 0,
+        hi: Number(localStorage.getItem('snake.multi.hi')||0)
+      };
+      updateUI();
+    }
+
+    function saveConfig(){
+      localStorage.setItem(storageKey, JSON.stringify({
+        cols: CFG.cols, rows: CFG.rows, speed: CFG.speed, wrap: CFG.wrap, hazards: CFG.hazards
+      }));
+    }
+
+    function updateUI(){
+      ui.sbMode.textContent = STATE.mode=== 'BOT' ? MODES.BOT : MODES.LOCAL;
+      ui.sb1.textContent = STATE.snakes[0].score;
+      ui.sb2.textContent = STATE.snakes[1].score;
+      ui.hi.textContent = STATE.hi;
+      ui.speedLabel.textContent = CFG.speed;
+      ui.overlay.hidden = !(STATE.paused || STATE.over);
+      ui.overlayTitle.textContent = STATE.over ? 'Game Over' : 'Paused';
+      ui.overlayBody.textContent = STATE.over ? 'Press 🔁 Restart to play again.' : 'Press Space or tap ⏯️ to continue.';
+      ui.btnPause.textContent = STATE.paused ? '▶️ Resume' : '⏸️ Pause';
+      ui.btnPause.setAttribute('aria-pressed', STATE.paused);
+      ui.btnRestart.disabled = false;
+      document.getElementById('modeName').style.color = STATE.mode==='BOT' ? '#f7d774' : '#6ea8fe';
+    }
+
+    // --- Input
+    const keyDirs = {
+      'ArrowUp':'UP','ArrowDown':'DOWN','ArrowLeft':'LEFT','ArrowRight':'RIGHT',
+      'w':'UP','s':'DOWN','a':'LEFT','d':'RIGHT','W':'UP','S':'DOWN','A':'LEFT','D':'RIGHT'
+    };
+    window.addEventListener('keydown', (e) => {
+      if(e.code==='Space'){ STATE.paused = !STATE.paused; updateUI(); return; }
+      const k = e.key;
+      if(!keyDirs[k]) return;
+      const dir = keyDirs[k];
+      // Map P1 (arrows) vs P2 (WASD)
+      if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k)) setDir(STATE.snakes[0], dir);
+      else setDir(STATE.snakes[1], dir);
+    });
+
+    function setDir(snake, dir){
+      if(OPP[snake.dir] === dir) return; // no instant reverse
+      snake.pendingDir = dir;
+    }
+
+    // --- Bot AI (greedy + simple hazard avoidance)
+    function botThink(state){
+      const bot = state.snakes[1];
+      if(!bot.alive) return;
+      const head = bot.body[0];
+      const target = state.food;
+      const choices = [];
+      function nextPos(dir){
+        const d = DIRS[dir];
+        let np = {x: head.x + d[0], y: head.y + d[1]};
+        if(CFG.wrap) np = wrapPos(np);
+        return np;
+      }
+      // Consider 4 dirs, score by manhattan distance, punish collisions
+      for(const dir of ['UP','DOWN','LEFT','RIGHT']){
+        if(OPP[bot.dir]===dir) continue; // no reverse
+        const np = nextPos(dir);
+        let bad = false;
+        if(!CFG.wrap && !inBounds(np)) bad = true;
+        if(!bad){
+          // Check snake bodies
+          for(const s of state.snakes){ for(const c of s.body){ if(equal(c,np)) { bad=true; break; } }
+            if(bad) break; }
+          if(!bad && state.hazards){ for(const h of state.haz){ if(equal(h,np)) { bad=true; break; } } }
+        }
+        const md = Math.abs(np.x - target.x) + Math.abs(np.y - target.y);
+        const score = bad ? 1e9 : md + Math.random()*0.2; // slight noise to avoid ties
+        choices.push({dir, score});
+      }
+      choices.sort((a,b)=>a.score-b.score);
+      if(choices.length) bot.pendingDir = choices[0].dir;
+    }
+
+    // --- Tick / Update
+    function step(){
+      // One logic tick (move snakes, collisions, scoring)
+      for(const s of STATE.snakes){ if(!s.alive) continue; s.dir = s.pendingDir; }
+      if(STATE.mode==='BOT') botThink(STATE);
+
+      for(const s of STATE.snakes){
+        if(!s.alive) continue;
+        const d = DIRS[s.dir];
+        let next = { x: s.body[0].x + d[0], y: s.body[0].y + d[1] };
+        if(CFG.wrap) next = wrapPos(next);
+
+        if(!CFG.wrap && !inBounds(next)) { kill(s); continue; }
+        if(hitSnake(next)) { kill(s); continue; }
+        if(CFG.hazards && hitHazard(next)) { kill(s); continue; }
+
+        s.body.unshift(next);
+        if(equal(next, STATE.food)){
+          s.grow += 2;
+          s.score += 10;
+          STATE.food = newFood(STATE);
+        }
+        if(s.grow>0) s.grow--; else s.body.pop();
+      }
+
+      // If both dead -> game over
+      if(STATE.snakes.every(s=>!s.alive)) endGame();
+
+      // Update highscore
+      const maxScore = Math.max(STATE.snakes[0].score, STATE.snakes[1].score);
+      if(maxScore>STATE.hi){ STATE.hi = maxScore; localStorage.setItem('snake.multi.hi', String(STATE.hi)); }
+
+      updateUI();
+    }
+
+    function hitSnake(p){
+      for(const s of STATE.snakes){ for(const c of s.body){ if(equal(c,p)) return true; } }
+      return false;
+    }
+    function hitHazard(p){
+      for(const h of STATE.haz){ if(equal(h,p)) return true; }
+      return false;
+    }
+
+    function kill(s){ s.alive = false; }
+
+    function endGame(){ STATE.over = true; STATE.paused = true; updateUI(); }
+
+    // --- Draw
+    function drawCell(x,y,fill){
+      ctx.fillStyle = fill;
+      ctx.fillRect(x*CFG.cell+1, y*CFG.cell+1, CFG.cell-2, CFG.cell-2);
+    }
+    function draw(){
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+
+      // Hazards
+      if(STATE.hazards){
+        for(const h of STATE.haz) drawCell(h.x, h.y, '#2a335c');
+      }
+
+      // Food (soft glow)
+      const f = STATE.food; 
+      drawCell(f.x, f.y, '#ffd166');
+
+      // Snakes
+      for(const s of STATE.snakes){
+        ctx.globalAlpha = s.alive?1:0.4;
+        for(let i=0;i<s.body.length;i++){
+          const c = s.body[i];
+          const shade = i===0 ? s.color : shadeHex(s.color, -12);
+          drawCell(c.x, c.y, shade);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // Grid highlight on heads
+      for(const s of STATE.snakes){
+        if(!s.alive) continue;
+        const h = s.body[0];
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(h.x*CFG.cell+2, h.y*CFG.cell+2, CFG.cell-4, CFG.cell-4);
+      }
+    }
+
+    function shadeHex(hex, percent){
+      const v = hex.replace('#','');
+      const r = parseInt(v.slice(0,2),16), g = parseInt(v.slice(2,4),16), b = parseInt(v.slice(4,6),16);
+      const f = (x)=> clamp(Math.round(x + 255*(percent/100)), 0, 255);
+      return `#${f(r).toString(16).padStart(2,'0')}${f(g).toString(16).padStart(2,'0')}${f(b).toString(16).padStart(2,'0')}`;
+    }
+
+    // --- Main Loop
+    let rafId;
+    function loop(ts){
+      if(!STATE.paused && !STATE.over){
+        const interval = 1000/CFG.speed;
+        if(ts - STATE.lastStep >= interval){
+          STATE.lastStep = ts;
+          step();
+        }
+      }
+      draw();
+      rafId = requestAnimationFrame(loop);
+    }
+
+    // --- UI Events
+    ui.speed.addEventListener('input', ()=>{ ui.speedLabel.textContent = ui.speed.value; CFG.speed = Number(ui.speed.value); saveConfig(); });
+    ui.cols.addEventListener('change', ()=>{ saveConfig(); });
+    ui.rows.addEventListener('change', ()=>{ saveConfig(); });
+    ui.wrap.addEventListener('change', ()=>{ saveConfig(); });
+    ui.hazards.addEventListener('change', ()=>{ saveConfig(); });
+
+    ui.btnPause.addEventListener('click', ()=>{ STATE.paused = !STATE.paused; updateUI(); });
+    ui.btnRestart.addEventListener('click', ()=>{ init(STATE.mode); });
+    ui.btnBot.addEventListener('click', ()=>{ init('BOT'); });
+    ui.btnLocal.addEventListener('click', ()=>{ init('LOCAL'); });
+    ui.overlayBtn.addEventListener('click', ()=>{ STATE.paused=false; updateUI(); });
+
+    // --- Init & Go
+    resizeCanvas();
+    ui.speed.value = CFG.speed; ui.speedLabel.textContent = CFG.speed;
+    ui.cols.value = CFG.cols; ui.rows.value = CFG.rows; ui.wrap.checked = CFG.wrap; ui.hazards.checked = CFG.hazards;
+    init('BOT');
+    loop(0);
+  })();
+  </script>
+</body>
+</html>
