@@ -3,41 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multiplayer Snake – Smarter Bot (A* + Tail‑Chase)</title>
+  <title>Multiplayer Snake – Smarter Bot (A* + Tail‑Chase + 2‑Step Safety)</title>
   <style>
-    :root {
-      --bg: #0f1220;
-      --panel: #1b2038;
-      --accent: #7cf49a;
-      --accent2: #6ea8fe;
-      --danger: #ff6b6b;
-      --text: #e9ecf1;
-      --muted: #9aa4b2;
-      --grid: #1e2442;
-    }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; background: radial-gradient(1200px 800px at 70% 10%, #1a1f35 0%, var(--bg) 60%); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans"; }
-    .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 16px; height: 100%; padding: 16px; }
-    .panel { background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.35), inset 0 -50px 100px rgba(255,255,255,0.02); }
-    h1 { font-size: 22px; margin: 8px 0 12px; letter-spacing: 0.2px; }
-    h2 { font-size: 14px; margin: 14px 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
-    .btn { appearance: none; border: 1px solid rgba(255,255,255,0.12); background: #121427; color: var(--text); padding: 10px 12px; border-radius: 12px; cursor: pointer; transition: 120ms transform, 120ms background, 120ms border-color; font-weight: 600; width: 100%; text-align: left; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
-    .btn:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.2); }
-    .btn.primary { background: linear-gradient(180deg, rgba(124,244,154,0.18), rgba(124,244,154,0.08)); border-color: rgba(124,244,154,0.35); }
-    .btn.danger { background: linear-gradient(180deg, rgba(255,107,107,0.18), rgba(255,107,107,0.08)); border-color: rgba(255,107,107,0.35); }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .small { font-size: 12px; color: var(--muted); }
-    label { display: grid; gap: 6px; font-size: 13px; }
-    input[type="range"], input[type="number"] { width: 100%; }
-    .kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; }
-    .kv div:nth-child(odd){ color: var(--muted); }
-
-    .gameWrap { position: relative; display: grid; place-items: center; }
-    canvas { background: repeating-linear-gradient(0deg, var(--grid), var(--grid) 1px, transparent 1px, transparent 24px),
-              repeating-linear-gradient(90deg, var(--grid), var(--grid) 1px, transparent 1px, transparent 24px),
-              linear-gradient(180deg, #0b0e1a, #0c1021); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 12px 40px rgba(0,0,0,0.45); }
-
-    @media (max-width: 960px){ .wrap { grid-template-columns: 1fr; } }
+    :root { --bg:#0f1220; --panel:#1b2038; --accent:#7cf49a; --accent2:#6ea8fe; --danger:#ff6b6b; --text:#e9ecf1; --muted:#9aa4b2; --grid:#1e2442; }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 70% 10%, #1a1f35 0%, var(--bg) 60%);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans"}
+    .wrap{display:grid;grid-template-columns:320px 1fr;gap:16px;height:100%;padding:16px}
+    .panel{background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,0.35),inset 0 -50px 100px rgba(255,255,255,0.02)}
+    h1{font-size:22px;margin:8px 0 12px;letter-spacing:.2px}
+    h2{font-size:14px;margin:14px 0 8px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px}
+    .btn{appearance:none;border:1px solid rgba(255,255,255,0.12);background:#121427;color:var(--text);padding:10px 12px;border-radius:12px;cursor:pointer;transition:120ms transform,120ms background,120ms border-color;font-weight:600;width:100%;text-align:left;display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}
+    .btn:hover{transform:translateY(-1px);border-color:rgba(255,255,255,0.2)}
+    .btn.primary{background:linear-gradient(180deg,rgba(124,244,154,0.18),rgba(124,244,154,0.08));border-color:rgba(124,244,154,0.35)}
+    .btn.danger{background:linear-gradient(180deg,rgba(255,107,107,0.18),rgba(255,107,107,0.08));border-color:rgba(255,107,107,0.35)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .small{font-size:12px;color:var(--muted)}
+    label{display:grid;gap:6px;font-size:13px}
+    input[type=range],input[type=number]{width:100%}
+    .kv{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center}
+    .kv div:nth-child(odd){color:var(--muted)}
+    .gameWrap{position:relative;display:grid;place-items:center}
+    canvas{background:repeating-linear-gradient(0deg,var(--grid),var(--grid) 1px,transparent 1px,transparent 24px),repeating-linear-gradient(90deg,var(--grid),var(--grid) 1px,transparent 1px,transparent 24px),linear-gradient(180deg,#0b0e1a,#0c1021);border-radius:16px;border:1px solid rgba(255,255,255,0.1);box-shadow:0 12px 40px rgba(0,0,0,0.45)}
+    @media (max-width:960px){.wrap{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -52,7 +39,6 @@
         <div>Speed</div><div><span id="speedLabel">10</span> ticks/s</div>
         <div>Foods</div><div id="foodsLabel">4</div>
       </div>
-
       <h2>Play</h2>
       <div class="row">
         <button class="btn primary" id="btnBot">🚀 vs Bot</button>
@@ -62,477 +48,142 @@
         <button class="btn" id="btnPause">⏯️ Pause</button>
         <button class="btn danger" id="btnRestart">🔁 Restart</button>
       </div>
-
       <h2>Settings</h2>
-      <label>Speed
-        <input type="range" id="speed" min="5" max="25" step="1" value="10"/>
-      </label>
+      <label>Speed <input type="range" id="speed" min="5" max="25" step="1" value="10"/></label>
       <label>Board Size
         <div class="row">
           <input type="number" id="cols" min="12" max="64" value="28"/>
           <input type="number" id="rows" min="10" max="48" value="22"/>
         </div>
       </label>
-      <label>
-        <input type="checkbox" id="wrap" checked /> Wrap walls (classic)
-      </label>
-      <label>
-        <input type="checkbox" id="hazards" /> Random hazards
-      </label>
-      <label>Food count
-        <input type="number" id="foodCount" min="1" max="10" value="4" />
-      </label>
+      <label><input type="checkbox" id="wrap" checked/> Wrap walls (classic)</label>
+      <label><input type="checkbox" id="hazards"/> Random hazards</label>
+      <label>Food count <input type="number" id="foodCount" min="1" max="10" value="4"/></label>
       <p class="small">Center overlay removed. Space = pause. P1: Arrows, P2: WASD.</p>
-
       <h2>Legend</h2>
       <div class="kv small">
         <div>🍋 Food</div><div>Yellow square with outline</div>
         <div>☠️ Hazard</div><div>Red X (don’t touch)</div>
       </div>
     </aside>
-
     <main class="gameWrap">
       <canvas id="game" width="672" height="528" aria-label="Snake game canvas" role="img"></canvas>
-      <!-- No center overlay per request -->
     </main>
   </div>
 
   <script>
-  (() => {
-    // --- Utility
-    const rnd = (n) => Math.floor(Math.random()*n);
-    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  (()=>{
+    const rnd=n=>Math.floor(Math.random()*n);
+    const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+    const canvas=document.getElementById('game');
+    const ctx=canvas.getContext('2d');
+    const ui={sbMode:modeName,sb1:score1,sb2:score2,hi:hi,speed:speed,speedLabel:speedLabel,cols:cols,rows:rows,wrap:wrap,hazards:hazards,foodCount:foodCount,foodsLabel:foodsLabel,btnPause:btnPause,btnRestart:btnRestart,btnBot:btnBot,btnLocal:btnLocal};
 
-    // --- Game State
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
-    const ui = {
-      sbMode: document.getElementById('modeName'),
-      sb1: document.getElementById('score1'),
-      sb2: document.getElementById('score2'),
-      hi: document.getElementById('hi'),
-      speed: document.getElementById('speed'),
-      speedLabel: document.getElementById('speedLabel'),
-      cols: document.getElementById('cols'),
-      rows: document.getElementById('rows'),
-      wrap: document.getElementById('wrap'),
-      hazards: document.getElementById('hazards'),
-      foodCount: document.getElementById('foodCount'),
-      foodsLabel: document.getElementById('foodsLabel'),
-      btnPause: document.getElementById('btnPause'),
-      btnRestart: document.getElementById('btnRestart'),
-      btnBot: document.getElementById('btnBot'),
-      btnLocal: document.getElementById('btnLocal'),
-    };
+    const storageKey='snake.multi.v6';
+    const store=JSON.parse(localStorage.getItem(storageKey)||'{}');
+    let CFG={cols:Number(store.cols)||28,rows:Number(store.rows)||22,cell:24,speed:Number(store.speed)||10,wrap:store.wrap!==undefined?!!store.wrap:true,hazards:!!store.hazards,foodCount:Number(store.foodCount)||4};
+    function saveConfig(){localStorage.setItem(storageKey,JSON.stringify({cols:CFG.cols,rows:CFG.rows,speed:CFG.speed,wrap:CFG.wrap,hazards:CFG.hazards,foodCount:CFG.foodCount}))}
+    function resizeCanvas(){canvas.width=CFG.cols*CFG.cell;canvas.height=CFG.rows*CFG.cell}
 
-    // Persistence
-    const storageKey = 'snake.multi.v5';
-    const store = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    const DIRS={UP:[0,-1],DOWN:[0,1],LEFT:[-1,0],RIGHT:[1,0]};
+    const OPP={UP:'DOWN',DOWN:'UP',LEFT:'RIGHT',RIGHT:'LEFT'};
+    function newSnake(id,color,start,dir){return{id,color,body:[start],dir,pendingDir:dir,grow:2,alive:true,score:0}}
 
-    // Config
-    let CFG = {
-      cols: Number(store.cols) || 28,
-      rows: Number(store.rows) || 22,
-      cell: 24,
-      speed: Number(store.speed) || 10, // ticks per second
-      wrap: store.wrap !== undefined ? !!store.wrap : true,
-      hazards: !!store.hazards,
-      foodCount: Number(store.foodCount) || 4,
-    };
+    function equal(a,b){return a&&b&&a.x===b.x&&a.y===b.y}
+    function wrapPos(p){return{x:(p.x+CFG.cols)%CFG.cols,y:(p.y+CFG.rows)%CFG.rows}}
+    function inBounds(p){return p.x>=0&&p.x<CFG.cols&&p.y>=0&&p.y<CFG.rows}
 
-    function saveConfig(){
-      localStorage.setItem(storageKey, JSON.stringify({
-        cols: CFG.cols, rows: CFG.rows, speed: CFG.speed, wrap: CFG.wrap, hazards: CFG.hazards, foodCount: CFG.foodCount
-      }));
-    }
+    function newFood(state){let p;let tries=0;do{p={x:rnd(state.cols),y:rnd(state.rows)};tries++;if(tries>2000)break}while(collisionAt(state,p));return p}
+    function newHazards(state,count){const hz=[];for(let i=0;i<count;i++){let p;let tries=0;do{p={x:rnd(state.cols),y:rnd(state.rows)};tries++;if(tries>2000)break}while(collisionAt(state,p));hz.push(p)}return hz}
 
-    // Scale canvas to grid
-    function resizeCanvas(){
-      canvas.width = CFG.cols * CFG.cell;
-      canvas.height = CFG.rows * CFG.cell;
-    }
+    function collisionAt(state,p){for(const s of state.snakes){for(const c of s.body){if(equal(c,p))return true}}if(state.hazards)for(const h of state.haz){if(equal(h,p))return true}if(state.foods)for(const f of state.foods){if(equal(f,p))return true}return false}
 
-    // Entities
-    const DIRS = { UP:[0,-1], DOWN:[0,1], LEFT:[-1,0], RIGHT:[1,0] };
-    const OPP = { UP:'DOWN', DOWN:'UP', LEFT:'RIGHT', RIGHT:'LEFT' };
-
-    function newSnake(id, color, start, dir){
-      return { id, color, body:[start], dir, pendingDir: dir, grow: 2, alive:true, score:0 };
-    }
-
-    function newFood(state){
-      let p; let tries = 0;
-      do { p = {x:rnd(state.cols), y:rnd(state.rows)}; tries++; if(tries>2000) break; }
-      while(collisionAt(state, p));
-      return p;
-    }
-
-    function newHazards(state, count){
-      const hz = [];
-      for(let i=0;i<count;i++){
-        let p; let tries=0;
-        do { p = {x:rnd(state.cols), y:rnd(state.rows)}; tries++; if(tries>2000) break; }
-        while(collisionAt(state, p));
-        hz.push(p);
-      }
-      return hz;
-    }
-
-    function equal(a,b){ return a && b && a.x===b.x && a.y===b.y; }
-
-    function wrapPos(p){
-      return { x:(p.x+CFG.cols)%CFG.cols, y:(p.y+CFG.rows)%CFG.rows };
-    }
-
-    function inBounds(p){
-      return p.x>=0 && p.x<CFG.cols && p.y>=0 && p.y<CFG.rows;
-    }
-
-    function collisionAt(state, p){
-      for(const s of state.snakes){
-        for(const c of s.body){ if(equal(c,p)) return true; }
-      }
-      if(state.hazards) for(const h of state.haz){ if(equal(h,p)) return true; }
-      if(state.foods) for(const f of state.foods){ if(equal(f,p)) return true; }
-      return false;
-    }
-
-    // --- Game Lifecycle
-    let STATE = {};
-    const MODES = { BOT:'vs Bot', LOCAL:'Local Versus' };
-
+    let STATE={};
+    const MODES={BOT:'vs Bot',LOCAL:'Local Versus'};
     function init(mode='BOT'){
-      CFG.speed = clamp(Number(ui.speed.value), 5, 25);
-      CFG.cols = clamp(Number(ui.cols.value), 12, 64);
-      CFG.rows = clamp(Number(ui.rows.value), 10, 48);
-      CFG.wrap = !!ui.wrap.checked;
-      CFG.hazards = !!ui.hazards.checked;
-      CFG.foodCount = clamp(Number(ui.foodCount.value), 1, 10);
-      saveConfig();
-      resizeCanvas();
-
-      const s1 = newSnake('P1', '#7cf49a', {x:Math.floor(CFG.cols*0.25), y:Math.floor(CFG.rows/2)}, 'RIGHT');
-      const s2 = newSnake(mode==='BOT'?'BOT':'P2', mode==='BOT'?'#f7d774':'#6ea8fe', {x:Math.floor(CFG.cols*0.75), y:Math.floor(CFG.rows/2)}, 'LEFT');
-      STATE = {
-        cols: CFG.cols, rows: CFG.rows,
-        snakes: [s1, s2],
-        foods: [],
-        haz: CFG.hazards ? newHazards({cols:CFG.cols, rows:CFG.rows, snakes:[s1,s2], foods:[]}, Math.floor((CFG.cols*CFG.rows)/180)) : [],
-        hazards: CFG.hazards,
-        mode,
-        paused: false,
-        over: false,
-        tick: 0,
-        lastStep: 0,
-        hi: Number(localStorage.getItem('snake.multi.hi')||0)
-      };
-      for(let i=0;i<CFG.foodCount;i++) STATE.foods.push(newFood(STATE));
-      BOTSTATE = { lastTarget:null, banned:new Map(), stallTicks:0, lastScore:0, lastHead:null };
+      CFG.speed=clamp(Number(ui.speed.value),5,25);CFG.cols=clamp(Number(ui.cols.value),12,64);CFG.rows=clamp(Number(ui.rows.value),10,48);CFG.wrap=!!ui.wrap.checked;CFG.hazards=!!ui.hazards.checked;CFG.foodCount=clamp(Number(ui.foodCount.value),1,10);saveConfig();resizeCanvas();
+      const s1=newSnake('P1','#7cf49a',{x:Math.floor(CFG.cols*0.25),y:Math.floor(CFG.rows/2)},'RIGHT');
+      const s2=newSnake(mode==='BOT'?'BOT':'P2',mode==='BOT'?'#f7d774':'#6ea8fe',{x:Math.floor(CFG.cols*0.75),y:Math.floor(CFG.rows/2)},'LEFT');
+      STATE={cols:CFG.cols,rows:CFG.rows,snakes:[s1,s2],foods:[],haz:CFG.hazards?newHazards({cols:CFG.cols,rows:CFG.rows,snakes:[s1,s2],foods:[]},Math.floor((CFG.cols*CFG.rows)/180)):[],hazards:CFG.hazards,mode,paused:false,over:false,tick:0,lastStep:0,hi:Number(localStorage.getItem('snake.multi.hi')||0)};
+      for(let i=0;i<CFG.foodCount;i++)STATE.foods.push(newFood(STATE));
+      BOTSTATE={lastTarget:null,banned:new Map(),stallTicks:0,lastScore:0,lastHead:null};
       updateUI();
     }
+    function updateUI(){ui.sbMode.textContent=STATE.mode==='BOT'?MODES.BOT:MODES.LOCAL;ui.sb1.textContent=STATE.snakes[0].score;ui.sb2.textContent=STATE.snakes[1].score;ui.hi.textContent=STATE.hi;ui.speedLabel.textContent=CFG.speed;ui.foodsLabel.textContent=CFG.foodCount;ui.btnPause.textContent=STATE.paused?'▶️ Resume':'⏸️ Pause';ui.btnPause.setAttribute('aria-pressed',STATE.paused);document.getElementById('modeName').style.color=STATE.mode==='BOT'?'#f7d774':'#6ea8fe'}
 
-    function updateUI(){
-      ui.sbMode.textContent = STATE.mode=== 'BOT' ? MODES.BOT : MODES.LOCAL;
-      ui.sb1.textContent = STATE.snakes[0].score;
-      ui.sb2.textContent = STATE.snakes[1].score;
-      ui.hi.textContent = STATE.hi;
-      ui.speedLabel.textContent = CFG.speed;
-      ui.foodsLabel.textContent = CFG.foodCount;
-      ui.btnPause.textContent = STATE.paused ? '▶️ Resume' : '⏸️ Pause';
-      ui.btnPause.setAttribute('aria-pressed', STATE.paused);
-      document.getElementById('modeName').style.color = STATE.mode==='BOT' ? '#f7d774' : '#6ea8fe';
-    }
+    const keyDirs={'ArrowUp':'UP','ArrowDown':'DOWN','ArrowLeft':'LEFT','ArrowRight':'RIGHT','w':'UP','s':'DOWN','a':'LEFT','d':'RIGHT','W':'UP','S':'DOWN','A':'LEFT','D':'RIGHT'};
+    window.addEventListener('keydown',e=>{if(e.code==='Space'){STATE.paused=!STATE.paused;updateUI();return}const k=e.key;if(!keyDirs[k])return;const dir=keyDirs[k];if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k))setDir(STATE.snakes[0],dir);else setDir(STATE.snakes[1],dir)});
+    function setDir(snake,dir){if(OPP[snake.dir]===dir)return;snake.pendingDir=dir}
 
-    // --- Input
-    const keyDirs = {
-      'ArrowUp':'UP','ArrowDown':'DOWN','ArrowLeft':'LEFT','ArrowRight':'RIGHT',
-      'w':'UP','s':'DOWN','a':'LEFT','d':'RIGHT','W':'UP','S':'DOWN','A':'LEFT','D':'RIGHT'
-    };
-    window.addEventListener('keydown', (e) => {
-      if(e.code==='Space'){ STATE.paused = !STATE.paused; updateUI(); return; }
-      const k = e.key;
-      if(!keyDirs[k]) return;
-      const dir = keyDirs[k];
-      if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k)) setDir(STATE.snakes[0], dir);
-      else setDir(STATE.snakes[1], dir);
-    });
+    // Bot AI
+    function neighborsOf(p){const res=[{dir:'UP',x:p.x,y:p.y-1},{dir:'DOWN',x:p.x,y:p.y+1},{dir:'LEFT',x:p.x-1,y:p.y},{dir:'RIGHT',x:p.x+1,y:p.y}];if(CFG.wrap)for(const n of res){n.x=(n.x+CFG.cols)%CFG.cols;n.y=(n.y+CFG.rows)%CFG.rows}return res}
+    function isBlocked(state,p,considerTailFree=false){if(!CFG.wrap&&!(p.x>=0&&p.x<CFG.cols&&p.y>=0&&p.y<CFG.rows))return true;if(state.hazards)for(const h of state.haz){if(equal(h,p))return true}for(const s of state.snakes){for(let i=0;i<s.body.length;i++){const cell=s.body[i];if(considerTailFree&&s===state.snakes[1]&&i===s.body.length-1&&s.grow===0)continue;if(equal(cell,p))return true}}return false}
+    const keyOf=p=>`${p.x},${p.y}`;
+    function reconstruct(firstStepFrom,startKey,goalKey){let k=goalKey;while(firstStepFrom.get(k)&&firstStepFrom.get(k).prev){const prev=firstStepFrom.get(k).prev;if(prev===startKey)return firstStepFrom.get(k).dir;k=prev}return firstStepFrom.get(goalKey)?.dir||null}
+    function aStar(state,start,goal){const startKey=keyOf(start);const gScore=new Map([[startKey,0]]);const fScore=new Map([[startKey,0]]);const firstStepFrom=new Map();const open=new Set([startKey]);const goalKey=keyOf(goal);const h=p=>Math.abs(p.x-goal.x)+Math.abs(p.y-goal.y);while(open.size){let currentKey=null,best=Infinity;for(const k of open){const fs=fScore.get(k)??Infinity;if(fs<best){best=fs;currentKey=k}}const [cx,cy]=currentKey.split(',').map(Number);const current={x:cx,y:cy};if(currentKey===goalKey)return reconstruct(firstStepFrom,startKey,goalKey);open.delete(currentKey);for(const n of neighborsOf(current)){if(isBlocked(state,n,true))continue;const nk=keyOf(n);const tentative=(gScore.get(currentKey)??Infinity)+1;if(tentative<(gScore.get(nk)??Infinity)){gScore.set(nk,tentative);const dir=firstStepFrom.get(currentKey)?.dir||n.dir;firstStepFrom.set(nk,{prev:currentKey,dir});fScore.set(nk,tentative+h(n));open.add(nk)}}}return null}
+    function floodFillSize(state,start,limit=800){const seen=new Set();const q=[start];while(q.length&&seen.size<limit){const p=q.shift();const k=keyOf(p);if(seen.has(k))continue;seen.add(k);for(const n of neighborsOf(p))if(!isBlocked(state,n,true))q.push({x:n.x,y:n.y})}return seen.size}
 
-    function setDir(snake, dir){
-      if(OPP[snake.dir] === dir) return; // no instant reverse
-      snake.pendingDir = dir;
-    }
+    let BOTSTATE={lastTarget:null,banned:new Map(),stallTicks:0,lastScore:0,lastHead:null};
+    function chooseTarget(state,head){const now=STATE.tick;const candidates=state.foods.filter(f=>(BOTSTATE.banned.get(keyOf(f))??0)<now);if(!candidates.length)return null;candidates.sort((a,b)=>(Math.abs(head.x-a.x)+Math.abs(head.y-a.y))-(Math.abs(head.x-b.x)+Math.abs(head.y-b.y))+(Math.random()-0.5)*0.1);for(const f of candidates){const dir=aStar(state,head,f);if(dir){BOTSTATE.lastTarget=f;return{target:f,firstDir:dir}}}return{target:null,firstDir:null}}
 
-    // --- Bot AI: A* pathfinding with tail‑chase fallback & anti‑loop
-    function neighborsOf(p){
-      const res = [
-        {dir:'UP',    x:p.x,   y:p.y-1},
-        {dir:'DOWN',  x:p.x,   y:p.y+1},
-        {dir:'LEFT',  x:p.x-1, y:p.y},
-        {dir:'RIGHT', x:p.x+1, y:p.y},
-      ];
-      if (CFG.wrap) for (const n of res){ n.x=(n.x+CFG.cols)%CFG.cols; n.y=(n.y+CFG.rows)%CFG.rows; }
-      return res;
-    }
-    function isBlocked(state, p, considerTailFree=false){
-      if(!CFG.wrap && !inBounds(p)) return true;
-      if(state.hazards) for(const h of state.haz){ if(equal(h,p)) return true; }
-      for(const s of state.snakes){
-        for(let i=0;i<s.body.length;i++){
-          const cell = s.body[i];
-          if(considerTailFree && s===state.snakes[1] && i===s.body.length-1 && s.grow===0) continue; // treat bot tail as free next tick
-          if(equal(cell,p)) return true;
-        }
-      }
-      return false;
-    }
-    const keyOf = (p)=> `${p.x},${p.y}`;
-
-    function reconstruct(firstStepFrom, startKey, goalKey){
-      let k = goalKey;
-      while (firstStepFrom.get(k) && firstStepFrom.get(k).prev){
-        const prev = firstStepFrom.get(k).prev;
-        if (prev === startKey) return firstStepFrom.get(k).dir; // first move from start
-        k = prev;
-      }
-      return firstStepFrom.get(goalKey)?.dir || null;
-    }
-
-    function aStar(state, start, goal){
-      const startKey = keyOf(start);
-      const gScore = new Map([[startKey,0]]);
-      const fScore = new Map([[startKey,0]]);
-      const firstStepFrom = new Map();
-      const open = new Set([startKey]);
-      const goalKey = keyOf(goal);
-      const h = (p)=> Math.abs(p.x-goal.x)+Math.abs(p.y-goal.y);
-      while(open.size){
-        let currentKey=null, best=Infinity;
-        for(const k of open){ const fs=fScore.get(k) ?? Infinity; if(fs<best){ best=fs; currentKey=k; } }
-        const [cx,cy] = currentKey.split(',').map(Number); const current={x:cx,y:cy};
-        if(currentKey===goalKey) return reconstruct(firstStepFrom, startKey, goalKey);
-        open.delete(currentKey);
-        for(const n of neighborsOf(current)){
-          if(isBlocked(state, n, true)) continue;
-          const nk = keyOf(n);
-          const tentative = (gScore.get(currentKey) ?? Infinity) + 1;
-          if(tentative < (gScore.get(nk) ?? Infinity)){
-            gScore.set(nk, tentative);
-            const dir = firstStepFrom.get(currentKey)?.dir || n.dir;
-            firstStepFrom.set(nk, { prev: currentKey, dir });
-            fScore.set(nk, tentative + h(n));
-            open.add(nk);
-          }
-        }
-      }
-      return null; // no path
-    }
-
-    function floodFillSize(state, start, limit=800){
-      const seen = new Set();
-      const q = [start];
-      while(q.length && seen.size<limit){
-        const p = q.shift(); const k = keyOf(p); if(seen.has(k)) continue; seen.add(k);
-        for(const n of neighborsOf(p)) if(!isBlocked(state,n,true)) q.push({x:n.x,y:n.y});
-      }
-      return seen.size;
-    }
-
-    let BOTSTATE = { lastTarget:null, banned:new Map(), stallTicks:0, lastScore:0, lastHead:null };
-
-    function chooseTarget(state, head){
-      const now = STATE.tick;
-      const candidates = state.foods.filter(f => (BOTSTATE.banned.get(keyOf(f)) ?? 0) < now);
-      if(!candidates.length) return null;
-      candidates.sort((a,b)=> (Math.abs(head.x-a.x)+Math.abs(head.y-a.y)) - (Math.abs(head.x-b.x)+Math.abs(head.y-b.y)) + (Math.random()-0.5)*0.1);
-      for(const f of candidates){
-        const dir = aStar(state, head, f);
-        if(dir) { BOTSTATE.lastTarget = f; return { target:f, firstDir:dir }; }
-      }
-      return { target:null, firstDir:null };
-    }
+    // Two-step safety helpers
+    function nextPosFrom(pos,dir){const v=DIRS[dir];let np={x:pos.x+v[0],y:pos.y+v[1]};if(CFG.wrap)np=wrapPos(np);return np}
+    function countLegalMoves(state,pos,dirAfter){let cnt=0;for(const d of ['UP','DOWN','LEFT','RIGHT']){if(OPP[dirAfter]===d)continue;const np=nextPosFrom(pos,d);if(!isBlocked(state,np,true))cnt++}return cnt}
 
     function botThink(state){
-      const bot = state.snakes[1]; if(!bot.alive) return; const head = bot.body[0];
+      const bot=state.snakes[1]; if(!bot.alive)return; const head=bot.body[0];
+      const currentScore=bot.score; BOTSTATE.lastHead={x:head.x,y:head.y}; if(currentScore>BOTSTATE.lastScore){BOTSTATE.stallTicks=0;BOTSTATE.lastScore=currentScore}else BOTSTATE.stallTicks++;
+      const now=STATE.tick; for(const [k,until] of BOTSTATE.banned){ if(until<now) BOTSTATE.banned.delete(k) }
 
-      // Stall detection
-      const currentScore = bot.score;
-      BOTSTATE.lastHead = {x:head.x, y:head.y};
-      if(currentScore>BOTSTATE.lastScore){ BOTSTATE.stallTicks = 0; BOTSTATE.lastScore = currentScore; }
-      else BOTSTATE.stallTicks++;
+      let plan=chooseTarget(state,head);
+      if(plan&&plan.firstDir){const np=nextPosFrom(head,plan.firstDir);if(!isBlocked(state,np,true)&&countLegalMoves(state,np,plan.firstDir)>0){bot.pendingDir=plan.firstDir;return}}
 
-      // Expire old bans
-      const now = STATE.tick; for(const [k,until] of BOTSTATE.banned){ if(until<now) BOTSTATE.banned.delete(k); }
+      const tail=bot.body[bot.body.length-1]; const toTail=aStar(state,head,tail);
+      if(toTail){const np=nextPosFrom(head,toTail);if(!isBlocked(state,np,true)&&countLegalMoves(state,np,toTail)>0){bot.pendingDir=toTail;return}}
 
-      // 1) A* to a reachable food
-      let plan = chooseTarget(state, head);
-      if(plan && plan.firstDir){ bot.pendingDir = plan.firstDir; return; }
+      if(BOTSTATE.stallTicks>30&&BOTSTATE.lastTarget){BOTSTATE.banned.set(keyOf(BOTSTATE.lastTarget),now+200);BOTSTATE.lastTarget=null;BOTSTATE.stallTicks=0;plan=chooseTarget(state,head);if(plan&&plan.firstDir){const np=nextPosFrom(head,plan.firstDir);if(!isBlocked(state,np,true)&&countLegalMoves(state,np,plan.firstDir)>0){bot.pendingDir=plan.firstDir;return}}}
 
-      // 1.5) Tail‑chase fallback
-      const tail = bot.body[bot.body.length-1];
-      const toTail = aStar(state, head, tail);
-      if(toTail){ bot.pendingDir = toTail; return; }
-
-      // 2) If stalled, ban last target and replan
-      if(BOTSTATE.stallTicks > 30 && BOTSTATE.lastTarget){
-        BOTSTATE.banned.set(keyOf(BOTSTATE.lastTarget), now + 200);
-        BOTSTATE.lastTarget = null; BOTSTATE.stallTicks = 0;
-        plan = chooseTarget(state, head);
-        if(plan && plan.firstDir){ bot.pendingDir = plan.firstDir; return; }
-      }
-
-      // 3) Fallback: open space + distance + slight turn bonus
-      let bestDir = bot.dir; let best = -1e9;
-      const nearest = state.foods[0] ? state.foods.slice().sort((a,b)=> (Math.abs(head.x-a.x)+Math.abs(head.y-a.y)) - (Math.abs(head.x-b.x)+Math.abs(head.y-b.y)))[0] : null;
+      let bestDir=bot.dir,best=-1e9; const nearest=state.foods[0]?state.foods.slice().sort((a,b)=>(Math.abs(head.x-a.x)+Math.abs(head.y-a.y))-(Math.abs(head.x-b.x)+Math.abs(head.y-b.y)))[0]:null;
       for(const dir of ['UP','DOWN','LEFT','RIGHT']){
-        if(OPP[bot.dir]===dir) continue;
-        const v = DIRS[dir]; let np = {x: head.x+v[0], y: head.y+v[1]}; if(CFG.wrap) np=wrapPos(np);
-        if(isBlocked(state,np,true)) continue;
-        const area = floodFillSize(state, np, 1000);
-        const dist = nearest ? (Math.abs(np.x-nearest.x)+Math.abs(np.y-nearest.y)) : 0;
-        const turnBonus = (dir!==bot.dir) ? 0.15 : 0;
-        const score = 0.35*Math.log(1+area) - 0.6*dist + turnBonus + (Math.random()*0.2);
-        if(score>best){ best=score; bestDir=dir; }
+        if(OPP[bot.dir]===dir)continue; const np=nextPosFrom(head,dir); if(isBlocked(state,np,true))continue; if(countLegalMoves(state,np,dir)===0)continue;
+        const area=floodFillSize(state,np,1000); const dist=nearest?(Math.abs(np.x-nearest.x)+Math.abs(np.y-nearest.y)):0; const turnBonus=(dir!==bot.dir)?0.15:0; const score=0.35*Math.log(1+area)-0.6*dist+turnBonus+(Math.random()*0.1);
+        if(score>best){best=score;bestDir=dir}
       }
-      bot.pendingDir = bestDir;
+      bot.pendingDir=bestDir;
     }
 
-    // --- Tick / Update
-    function step(){
-      STATE.tick++;
-      for(const s of STATE.snakes){ if(!s.alive) continue; s.dir = s.pendingDir; }
-      if(STATE.mode==='BOT') botThink(STATE);
+    function step(){STATE.tick++; for(const s of STATE.snakes){if(!s.alive)continue;s.dir=s.pendingDir} if(STATE.mode==='BOT')botThink(STATE);
+      for(const s of STATE.snakes){ if(!s.alive)continue; const d=DIRS[s.dir]; let next={x:s.body[0].x+d[0],y:s.body[0].y+d[1]}; if(CFG.wrap)next=wrapPos(next);
+        if(!CFG.wrap&&!inBounds(next)){kill(s);continue} if(hitSnake(next)){kill(s);continue} if(CFG.hazards&&hitHazard(next)){kill(s);continue}
+        s.body.unshift(next); let ate=false; STATE.foods=STATE.foods.filter(f=>{if(equal(next,f)){s.grow+=2;s.score+=10;ate=true;return false}return true}); while(STATE.foods.length<CFG.foodCount)STATE.foods.push(newFood(STATE)); if(s.grow>0)s.grow--; else s.body.pop(); if(s.id==='BOT'&&ate){BOTSTATE.stallTicks=0;BOTSTATE.lastTarget=null}}
+      const maxScore=Math.max(STATE.snakes[0].score,STATE.snakes[1].score); if(maxScore>STATE.hi){STATE.hi=maxScore;localStorage.setItem('snake.multi.hi',String(STATE.hi))} updateUI()}
 
-      for(const s of STATE.snakes){
-        if(!s.alive) continue;
-        const d = DIRS[s.dir];
-        let next = { x: s.body[0].x + d[0], y: s.body[0].y + d[1] };
-        if(CFG.wrap) next = wrapPos(next);
+    function hitSnake(p){for(const s of STATE.snakes){for(const c of s.body){if(equal(c,p))return true}}return false}
+    function hitHazard(p){for(const h of STATE.haz){if(equal(h,p))return true}return false}
+    function kill(s){s.alive=false}
 
-        if(!CFG.wrap && !inBounds(next)) { kill(s); continue; }
-        if(hitSnake(next)) { kill(s); continue; }
-        if(CFG.hazards && hitHazard(next)) { kill(s); continue; }
+    function drawCell(x,y,fill){ctx.fillStyle=fill;ctx.fillRect(x*CFG.cell+1,y*CFG.cell+1,CFG.cell-2,CFG.cell-2)}
+    function draw(){ctx.clearRect(0,0,canvas.width,canvas.height); if(STATE.hazards){for(const h of STATE.haz){const x=h.x*CFG.cell,y=h.y*CFG.cell;ctx.strokeStyle='#ff6b6b';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x+4,y+4);ctx.lineTo(x+CFG.cell-4,y+CFG.cell-4);ctx.moveTo(x+CFG.cell-4,y+4);ctx.lineTo(x+4,y+CFG.cell-4);ctx.stroke()}}
+      for(const f of STATE.foods){drawCell(f.x,f.y,'#ffd166');ctx.strokeStyle='rgba(255,209,102,0.9)';ctx.lineWidth=2;ctx.strokeRect(f.x*CFG.cell+1.5,f.y*CFG.cell+1.5,CFG.cell-3,CFG.cell-3)}
+      for(const s of STATE.snakes){ctx.globalAlpha=s.alive?1:0.4;for(let i=0;i<s.body.length;i++){const c=s.body[i];const shade=i===0?s.color:shadeHex(s.color,-12);drawCell(c.x,c.y,shade)}ctx.globalAlpha=1}
+      for(const s of STATE.snakes){if(!s.alive)continue;const h=s.body[0];ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=2;ctx.strokeRect(h.x*CFG.cell+2,h.y*CFG.cell+2,CFG.cell-4,CFG.cell-4)} }
 
-        s.body.unshift(next);
-        let ate = false;
-        STATE.foods = STATE.foods.filter(f => {
-          if(equal(next,f)){
-            s.grow += 2;
-            s.score += 10;
-            ate = true; return false;
-          }
-          return true;
-        });
-        while(STATE.foods.length < CFG.foodCount) STATE.foods.push(newFood(STATE));
+    function shadeHex(hex,percent){const v=hex.replace('#','');let r=parseInt(v.slice(0,2),16),g=parseInt(v.slice(2,4),16),b=parseInt(v.slice(4,6),16);const f=x=>clamp(Math.round(x+255*(percent/100)),0,255);r=f(r);g=f(g);b=f(b);return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`}
 
-        if(s.grow>0) s.grow--; else s.body.pop();
+    function loop(ts){if(!STATE.paused){const interval=1000/CFG.speed;if(ts-STATE.lastStep>=interval){STATE.lastStep=ts;step()}}draw();requestAnimationFrame(loop)}
 
-        if(s.id==='BOT' && ate){ BOTSTATE.stallTicks = 0; BOTSTATE.lastTarget = null; }
-      }
+    ui.speed.addEventListener('input',()=>{ui.speedLabel.textContent=ui.speed.value;CFG.speed=Number(ui.speed.value);saveConfig()});
+    ui.cols.addEventListener('change',()=>{CFG.cols=clamp(Number(ui.cols.value),12,64);saveConfig();resizeCanvas();init(STATE.mode)});
+    ui.rows.addEventListener('change',()=>{CFG.rows=clamp(Number(ui.rows.value),10,48);saveConfig();resizeCanvas();init(STATE.mode)});
+    ui.wrap.addEventListener('change',()=>{CFG.wrap=!!ui.wrap.checked;saveConfig()});
+    ui.hazards.addEventListener('change',()=>{CFG.hazards=!!ui.hazards.checked;saveConfig();init(STATE.mode)});
+    ui.foodCount.addEventListener('change',()=>{CFG.foodCount=clamp(Number(ui.foodCount.value),1,10);ui.foodsLabel.textContent=CFG.foodCount;saveConfig();init(STATE.mode)});
+    ui.btnPause.addEventListener('click',()=>{STATE.paused=!STATE.paused;updateUI()});
+    ui.btnRestart.addEventListener('click',()=>{init(STATE.mode)});
+    ui.btnBot.addEventListener('click',()=>{init('BOT')});
+    ui.btnLocal.addEventListener('click',()=>{init('LOCAL')});
 
-      const maxScore = Math.max(STATE.snakes[0].score, STATE.snakes[1].score);
-      if(maxScore>STATE.hi){ STATE.hi = maxScore; localStorage.setItem('snake.multi.hi', String(STATE.hi)); }
-
-      updateUI();
-    }
-
-    function hitSnake(p){
-      for(const s of STATE.snakes){ for(const c of s.body){ if(equal(c,p)) return true; } }
-      return false;
-    }
-    function hitHazard(p){
-      for(const h of STATE.haz){ if(equal(h,p)) return true; }
-      return false;
-    }
-
-    function kill(s){ s.alive = false; }
-
-    // --- Draw
-    function drawCell(x,y,fill){
-      ctx.fillStyle = fill;
-      ctx.fillRect(x*CFG.cell+1, y*CFG.cell+1, CFG.cell-2, CFG.cell-2);
-    }
-
-    function draw(){
-      ctx.clearRect(0,0,canvas.width, canvas.height);
-
-      if(STATE.hazards){
-        for(const h of STATE.haz){
-          const x = h.x*CFG.cell, y = h.y*CFG.cell; 
-          ctx.strokeStyle = '#ff6b6b';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(x+4, y+4); ctx.lineTo(x+CFG.cell-4, y+CFG.cell-4);
-          ctx.moveTo(x+CFG.cell-4, y+4); ctx.lineTo(x+4, y+CFG.cell-4);
-          ctx.stroke();
-        }
-      }
-
-      for(const f of STATE.foods){
-        drawCell(f.x, f.y, '#ffd166');
-        ctx.strokeStyle = 'rgba(255, 209, 102, 0.9)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(f.x*CFG.cell+1.5, f.y*CFG.cell+1.5, CFG.cell-3, CFG.cell-3);
-      }
-
-      for(const s of STATE.snakes){
-        ctx.globalAlpha = s.alive?1:0.4;
-        for(let i=0;i<s.body.length;i++){
-          const c = s.body[i];
-          const shade = i===0 ? s.color : shadeHex(s.color, -12);
-          drawCell(c.x, c.y, shade);
-        }
-        ctx.globalAlpha = 1;
-      }
-
-      for(const s of STATE.snakes){
-        if(!s.alive) continue;
-        const h = s.body[0];
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(h.x*CFG.cell+2, h.y*CFG.cell+2, CFG.cell-4, CFG.cell-4);
-      }
-    }
-
-    function shadeHex(hex, percent){
-      const v = hex.replace('#','');
-      let r = parseInt(v.slice(0,2),16), g = parseInt(v.slice(2,4),16), b = parseInt(v.slice(4,6),16);
-      const f = (x)=> clamp(Math.round(x + 255*(percent/100)), 0, 255);
-      r=f(r); g=f(g); b=f(b);
-      return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
-    }
-
-    // --- Main Loop
-    function loop(ts){
-      if(!STATE.paused){
-        const interval = 1000/CFG.speed;
-        if(ts - STATE.lastStep >= interval){
-          STATE.lastStep = ts;
-          step();
-        }
-      }
-      draw();
-      requestAnimationFrame(loop);
-    }
-
-    // --- UI Events
-    ui.speed.addEventListener('input', ()=>{ ui.speedLabel.textContent = ui.speed.value; CFG.speed = Number(ui.speed.value); saveConfig(); });
-    ui.cols.addEventListener('change', ()=>{ CFG.cols = clamp(Number(ui.cols.value),12,64); saveConfig(); resizeCanvas(); init(STATE.mode); });
-    ui.rows.addEventListener('change', ()=>{ CFG.rows = clamp(Number(ui.rows.value),10,48); saveConfig(); resizeCanvas(); init(STATE.mode); });
-    ui.wrap.addEventListener('change', ()=>{ CFG.wrap = !!ui.wrap.checked; saveConfig(); });
-    ui.hazards.addEventListener('change', ()=>{ CFG.hazards = !!ui.hazards.checked; saveConfig(); init(STATE.mode); });
-    ui.foodCount.addEventListener('change', ()=>{ CFG.foodCount = clamp(Number(ui.foodCount.value),1,10); ui.foodsLabel.textContent = CFG.foodCount; saveConfig(); init(STATE.mode); });
-
-    ui.btnPause.addEventListener('click', ()=>{ STATE.paused = !STATE.paused; updateUI(); });
-    ui.btnRestart.addEventListener('click', ()=>{ init(STATE.mode); });
-    ui.btnBot.addEventListener('click', ()=>{ init('BOT'); });
-    ui.btnLocal.addEventListener('click', ()=>{ init('LOCAL'); });
-
-    // --- Init & Go
-    resizeCanvas();
-    ui.speed.value = CFG.speed; ui.speedLabel.textContent = CFG.speed;
-    ui.cols.value = CFG.cols; ui.rows.value = CFG.rows; ui.wrap.checked = CFG.wrap; ui.hazards.checked = CFG.hazards; ui.foodCount.value = CFG.foodCount; ui.foodsLabel.textContent = CFG.foodCount;
-    init('BOT');
-    requestAnimationFrame(loop);
+    resizeCanvas(); ui.speed.value=CFG.speed; ui.speedLabel.textContent=CFG.speed; ui.cols.value=CFG.cols; ui.rows.value=CFG.rows; ui.wrap.checked=CFG.wrap; ui.hazards.checked=CFG.hazards; ui.foodCount.value=CFG.foodCount; ui.foodsLabel.textContent=CFG.foodCount; init('BOT'); requestAnimationFrame(loop);
   })();
   </script>
 </body>
