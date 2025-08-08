@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multiplayer Snake – Sidebar, Multi‑Food, Smarter Bot (A* + Anti‑Loop)</title>
+  <title>Multiplayer Snake – Smarter Bot (A* + Tail‑Chase)</title>
   <style>
     :root {
       --bg: #0f1220;
@@ -126,7 +126,7 @@
     };
 
     // Persistence
-    const storageKey = 'snake.multi.v4';
+    const storageKey = 'snake.multi.v5';
     const store = JSON.parse(localStorage.getItem(storageKey) || '{}');
 
     // Config
@@ -262,7 +262,7 @@
       snake.pendingDir = dir;
     }
 
-    // --- Bot AI: A* pathfinding with stall detection & anti-loop
+    // --- Bot AI: A* pathfinding with tail‑chase fallback & anti‑loop
     function neighborsOf(p){
       const res = [
         {dir:'UP',    x:p.x,   y:p.y-1},
@@ -279,8 +279,7 @@
       for(const s of state.snakes){
         for(let i=0;i<s.body.length;i++){
           const cell = s.body[i];
-          // allow the bot's tail to be considered free next tick if not growing
-          if(considerTailFree && s===state.snakes[1] && i===s.body.length-1 && s.grow===0) continue;
+          if(considerTailFree && s===state.snakes[1] && i===s.body.length-1 && s.grow===0) continue; // treat bot tail as free next tick
           if(equal(cell,p)) return true;
         }
       }
@@ -341,13 +340,10 @@
     let BOTSTATE = { lastTarget:null, banned:new Map(), stallTicks:0, lastScore:0, lastHead:null };
 
     function chooseTarget(state, head){
-      // ignore temporarily banned foods
       const now = STATE.tick;
       const candidates = state.foods.filter(f => (BOTSTATE.banned.get(keyOf(f)) ?? 0) < now);
       if(!candidates.length) return null;
-      // sort by distance, but add tiny noise to break ties
       candidates.sort((a,b)=> (Math.abs(head.x-a.x)+Math.abs(head.y-a.y)) - (Math.abs(head.x-b.x)+Math.abs(head.y-b.y)) + (Math.random()-0.5)*0.1);
-      // try to find a target we actually have a path to
       for(const f of candidates){
         const dir = aStar(state, head, f);
         if(dir) { BOTSTATE.lastTarget = f; return { target:f, firstDir:dir }; }
@@ -358,28 +354,33 @@
     function botThink(state){
       const bot = state.snakes[1]; if(!bot.alive) return; const head = bot.body[0];
 
-      // Stall detection: if no score progress and head not moving closer for a while, we consider stalled
+      // Stall detection
       const currentScore = bot.score;
-      const lastHead = BOTSTATE.lastHead; BOTSTATE.lastHead = {x:head.x, y:head.y};
+      BOTSTATE.lastHead = {x:head.x, y:head.y};
       if(currentScore>BOTSTATE.lastScore){ BOTSTATE.stallTicks = 0; BOTSTATE.lastScore = currentScore; }
       else BOTSTATE.stallTicks++;
 
       // Expire old bans
       const now = STATE.tick; for(const [k,until] of BOTSTATE.banned){ if(until<now) BOTSTATE.banned.delete(k); }
 
-      // 1) Try chooseTarget (A* to a reachable food)
+      // 1) A* to a reachable food
       let plan = chooseTarget(state, head);
       if(plan && plan.firstDir){ bot.pendingDir = plan.firstDir; return; }
 
-      // 2) If stalled for a bit, ban the last target and replan
+      // 1.5) Tail‑chase fallback
+      const tail = bot.body[bot.body.length-1];
+      const toTail = aStar(state, head, tail);
+      if(toTail){ bot.pendingDir = toTail; return; }
+
+      // 2) If stalled, ban last target and replan
       if(BOTSTATE.stallTicks > 30 && BOTSTATE.lastTarget){
-        BOTSTATE.banned.set(keyOf(BOTSTATE.lastTarget), now + 200); // ban for 200 ticks
+        BOTSTATE.banned.set(keyOf(BOTSTATE.lastTarget), now + 200);
         BOTSTATE.lastTarget = null; BOTSTATE.stallTicks = 0;
         plan = chooseTarget(state, head);
         if(plan && plan.firstDir){ bot.pendingDir = plan.firstDir; return; }
       }
 
-      // 3) Fallback: score each legal move by open space + distance + small randomness
+      // 3) Fallback: open space + distance + slight turn bonus
       let bestDir = bot.dir; let best = -1e9;
       const nearest = state.foods[0] ? state.foods.slice().sort((a,b)=> (Math.abs(head.x-a.x)+Math.abs(head.y-a.y)) - (Math.abs(head.x-b.x)+Math.abs(head.y-b.y)))[0] : null;
       for(const dir of ['UP','DOWN','LEFT','RIGHT']){
@@ -388,7 +389,8 @@
         if(isBlocked(state,np,true)) continue;
         const area = floodFillSize(state, np, 1000);
         const dist = nearest ? (Math.abs(np.x-nearest.x)+Math.abs(np.y-nearest.y)) : 0;
-        const score = 0.35*Math.log(1+area) - 0.6*dist + (Math.random()*0.3);
+        const turnBonus = (dir!==bot.dir) ? 0.15 : 0;
+        const score = 0.35*Math.log(1+area) - 0.6*dist + turnBonus + (Math.random()*0.2);
         if(score>best){ best=score; bestDir=dir; }
       }
       bot.pendingDir = bestDir;
@@ -411,7 +413,6 @@
         if(CFG.hazards && hitHazard(next)) { kill(s); continue; }
 
         s.body.unshift(next);
-        // eat any overlapping food; support multiple foods
         let ate = false;
         STATE.foods = STATE.foods.filter(f => {
           if(equal(next,f)){
@@ -428,7 +429,6 @@
         if(s.id==='BOT' && ate){ BOTSTATE.stallTicks = 0; BOTSTATE.lastTarget = null; }
       }
 
-      // Update highscore
       const maxScore = Math.max(STATE.snakes[0].score, STATE.snakes[1].score);
       if(maxScore>STATE.hi){ STATE.hi = maxScore; localStorage.setItem('snake.multi.hi', String(STATE.hi)); }
 
@@ -455,7 +455,6 @@
     function draw(){
       ctx.clearRect(0,0,canvas.width, canvas.height);
 
-      // Hazards: draw as red X
       if(STATE.hazards){
         for(const h of STATE.haz){
           const x = h.x*CFG.cell, y = h.y*CFG.cell; 
@@ -468,7 +467,6 @@
         }
       }
 
-      // Food: yellow with subtle outline
       for(const f of STATE.foods){
         drawCell(f.x, f.y, '#ffd166');
         ctx.strokeStyle = 'rgba(255, 209, 102, 0.9)';
@@ -476,7 +474,6 @@
         ctx.strokeRect(f.x*CFG.cell+1.5, f.y*CFG.cell+1.5, CFG.cell-3, CFG.cell-3);
       }
 
-      // Snakes
       for(const s of STATE.snakes){
         ctx.globalAlpha = s.alive?1:0.4;
         for(let i=0;i<s.body.length;i++){
@@ -487,7 +484,6 @@
         ctx.globalAlpha = 1;
       }
 
-      // Head highlight
       for(const s of STATE.snakes){
         if(!s.alive) continue;
         const h = s.body[0];
