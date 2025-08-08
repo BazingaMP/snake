@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Snake — Single or Local Multiplayer + Bonus Items</title>
+  <title>Snake — Single or Local Multiplayer + Bonus Items + VFX</title>
   <style>
     :root { --bg:#0f1220; --panel:#1b2038; --accent:#7cf49a; --accent2:#6ea8fe; --danger:#ff6b6b; --text:#e9ecf1; --muted:#9aa4b2; --grid:#1e2442; }
     *{box-sizing:border-box}
@@ -88,7 +88,7 @@
     const ctx=canvas.getContext('2d');
     const ui={sbMode:modeName,sb1:score1,sb2:score2,hi:hi,speed:speed,speedLabel:speedLabel,cols:cols,rows:rows,wrap:wrap,hazards:hazards,foodCount:foodCount,foodsLabel:foodsLabel,itemMax:itemMax,itemsLabel:itemsLabel,btnPause:btnPause,btnRestart:btnRestart,btnSingle:btnSingle,btnLocal:btnLocal};
 
-    const storageKey='snake.local.v1';
+    const storageKey='snake.local.v2';
     const store=JSON.parse(localStorage.getItem(storageKey)||'{}');
     let CFG={cols:Number(store.cols)||28,rows:Number(store.rows)||22,cell:24,speed:Number(store.speed)||10,wrap:store.wrap!==undefined?!!store.wrap:true,hazards:!!store.hazards,foodCount:Number(store.foodCount)||4,itemMax:Number(store.itemMax)||2};
     function saveConfig(){localStorage.setItem(storageKey,JSON.stringify({cols:CFG.cols,rows:CFG.rows,speed:CFG.speed,wrap:CFG.wrap,hazards:CFG.hazards,foodCount:CFG.foodCount,itemMax:CFG.itemMax}))}
@@ -117,6 +117,29 @@
       return {x:p.x,y:p.y,type};
     }
 
+    // --- VFX: particles, popups, screen shake, flashes
+    const FX = { particles:[], popups:[], shakeT:0, shakeI:0, flashT:0 };
+    function spawnBurst(cx, cy, color, n=12, speed=1.6, size=3, life=18){
+      for(let i=0;i<n;i++){
+        const a = Math.random()*Math.PI*2;
+        const v = (0.4+Math.random())*speed;
+        FX.particles.push({x:cx, y:cy, vx:Math.cos(a)*v, vy:Math.sin(a)*v, life, max:life, size, color});
+      }
+    }
+    function spawnPopup(x,y,text,color='#fff',life=30){ FX.popups.push({x,y,vy:-0.02,life,max:life,text,color}); }
+    function shake(intensity=4, time=200){ FX.shakeI = Math.max(FX.shakeI, intensity); FX.shakeT = Math.max(FX.shakeT, time); }
+    function flash(time=120){ FX.flashT = Math.max(FX.flashT, time); }
+
+    function updateFX(dt){
+      // particles
+      FX.particles = FX.particles.filter(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.02; p.life--; return p.life>0; });
+      // popups
+      FX.popups = FX.popups.filter(t=>{ t.y += t.vy*dt; t.life--; return t.life>0; });
+      // timers
+      FX.shakeT = Math.max(0, FX.shakeT - dt);
+      FX.flashT = Math.max(0, FX.flashT - dt);
+    }
+
     // Game lifecycle
     let STATE={};
     const MODES={SINGLE:'Single', LOCAL:'Local Versus'};
@@ -140,6 +163,7 @@
       }
       STATE={cols:CFG.cols,rows:CFG.rows,snakes,foods:[],items:[],haz:CFG.hazards?newHazards({cols:CFG.cols,rows:CFG.rows,snakes,foods:[],items:[]},Math.floor((CFG.cols*CFG.rows)/180)):[],hazards:CFG.hazards,mode,paused:false,over:false,tick:0,lastStep:0,hi:Number(localStorage.getItem('snake.multi.hi')||0)};
       for(let i=0;i<CFG.foodCount;i++)STATE.foods.push(newFood(STATE));
+      FX.particles.length=0; FX.popups.length=0; FX.shakeT=0; FX.flashT=0; FX.shakeI=0;
       updateUI();
     }
 
@@ -180,21 +204,27 @@
         let next={x:s.body[0].x+d[0], y:s.body[0].y+d[1]};
         if(CFG.wrap) next = wrapPos(next);
 
-        if(!CFG.wrap && !inBounds(next)) { kill(s); continue; }
-        if(hitSnake(next)) { kill(s); continue; }
-        if(CFG.hazards && hitHazard(next)) { kill(s); continue; }
+        if(!CFG.wrap && !inBounds(next)) { kill(s,'wall'); continue; }
+        if(hitSnake(next)) { kill(s,'snake'); continue; }
+        if(CFG.hazards && hitHazard(next)) { kill(s,'hazard'); continue; }
 
         s.body.unshift(next);
         // Food
+        let ateFood=false;
         STATE.foods = STATE.foods.filter(f => {
-          if(equal(next,f)) { s.grow += 2; s.score += 10; return false; }
+          if(equal(next,f)) { s.grow += 2; s.score += 10; ateFood=true; return false; }
           return true;
         });
         while(STATE.foods.length < CFG.foodCount) STATE.foods.push(newFood(STATE));
+        if(ateFood){
+          const cx = next.x*CFG.cell+CFG.cell/2, cy = next.y*CFG.cell+CFG.cell/2;
+          spawnBurst(cx, cy, '#ffd166', 16, 1.3, 2.8, 20);
+          spawnPopup(cx, cy-6, '+10', '#ffd166');
+        }
 
         // Items
         STATE.items = STATE.items.filter(it => {
-          if(equal(next,it)) { applyItem(it.type, s); return false; }
+          if(equal(next,it)) { applyItem(it.type, s, next); return false; }
           return true;
         });
 
@@ -207,27 +237,53 @@
       updateUI();
     }
 
-    function applyItem(type, snake){
+    function applyItem(type, snake, pos){
+      const cx = pos ? pos.x*CFG.cell+CFG.cell/2 : snake.body[0].x*CFG.cell+CFG.cell/2;
+      const cy = pos ? pos.y*CFG.cell+CFG.cell/2 : snake.body[0].y*CFG.cell+CFG.cell/2;
       if(type==='shrink'){
         const keep = Math.max(2, Math.ceil(snake.body.length*0.7));
         snake.body = snake.body.slice(0, keep);
         snake.grow = Math.max(0, snake.grow - 2);
+        spawnBurst(cx, cy, '#b388ff', 20, 1.2, 3, 24);
+        spawnPopup(cx, cy-6, 'Shrink!', '#b388ff');
+        shake(3,120);
       } else if(type==='bonus'){
         snake.score += 50;
+        spawnBurst(cx, cy, '#4dd0e1', 18, 1.4, 3, 22);
+        spawnPopup(cx, cy-6, '+50', '#4dd0e1');
       } else if(type==='clear'){
         STATE.haz = [];
+        spawnBurst(cx, cy, '#ffcccb', 26, 1.0, 3, 26);
+        spawnPopup(cx, cy-6, 'Cleared!', '#ffcccb');
+        flash(140); shake(4,160);
       }
     }
 
     function hitSnake(p){ for(const s of STATE.snakes){ for(const c of s.body){ if(equal(c,p)) return true; } } return false; }
     function hitHazard(p){ for(const h of STATE.haz){ if(equal(h,p)) return true; } return false; }
-    function kill(s){ s.alive=false; }
+
+    function kill(s, reason='other'){
+      if(s.alive){
+        const h = s.body[0];
+        const cx=h.x*CFG.cell+CFG.cell/2, cy=h.y*CFG.cell+CFG.cell/2;
+        const col = reason==='hazard' ? '#ff6b6b' : '#ffffff';
+        spawnBurst(cx, cy, col, 24, 1.6, 3.2, 26);
+        shake(6,220); flash(120);
+      }
+      s.alive=false;
+    }
 
     // Draw
     function drawCell(x,y,fill){ ctx.fillStyle=fill; ctx.fillRect(x*CFG.cell+1,y*CFG.cell+1,CFG.cell-2,CFG.cell-2); }
 
     function draw(){
-      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // screen shake
+      const shakeX = FX.shakeT>0 ? (Math.random()*2-1)*FX.shakeI : 0;
+      const shakeY = FX.shakeT>0 ? (Math.random()*2-1)*FX.shakeI : 0;
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+
+      ctx.clearRect(-shakeX,-shakeY,canvas.width+Math.abs(shakeX),canvas.height+Math.abs(shakeY));
 
       // Hazards
       if(STATE.hazards){
@@ -273,8 +329,38 @@
         ctx.globalAlpha = 1;
       }
 
-      // Head highlight
-      for(const s of STATE.snakes){ if(!s.alive) continue; const h=s.body[0]; ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=2; ctx.strokeRect(h.x*CFG.cell+2,h.y*CFG.cell+2,CFG.cell-4,CFG.cell-4); }
+      // Particles (on top of board)
+      for(const p of FX.particles){
+        const t = p.life/p.max; // 1..0
+        ctx.globalAlpha = Math.max(0, t);
+        ctx.fillStyle = p.color || '#fff';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(1, p.size*t), 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Popups
+      ctx.font = 'bold 14px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for(const t of FX.popups){
+        const a = t.life/t.max;
+        ctx.globalAlpha = Math.max(0, a);
+        ctx.fillStyle = t.color; ctx.fillText(t.text, t.x, t.y);
+      }
+      ctx.globalAlpha = 1;
+
+      ctx.restore();
+
+      // Flash overlay
+      if(FX.flashT>0){
+        const a = Math.min(0.35, FX.flashT/140*0.35);
+        ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+      }
+
+      // advance VFX
+      updateFX(16);
     }
 
     function shadeHex(hex,percent){
