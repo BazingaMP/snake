@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multiplayer Snake – Sidebar, No Center Box, Multi‑Food</title>
+  <title>Multiplayer Snake – Sidebar, Multi‑Food, Smarter Bot (A*)</title>
   <style>
     :root {
       --bg: #0f1220;
@@ -82,7 +82,7 @@
       <label>Food count
         <input type="number" id="foodCount" min="1" max="10" value="4" />
       </label>
-      <p class="small">Center overlay is removed. Space = pause. P1: Arrows, P2: WASD.</p>
+      <p class="small">Center overlay removed. Space = pause. P1: Arrows, P2: WASD.</p>
 
       <h2>Legend</h2>
       <div class="kv small">
@@ -126,7 +126,7 @@
     };
 
     // Persistence
-    const storageKey = 'snake.multi.v2';
+    const storageKey = 'snake.multi.v3';
     const store = JSON.parse(localStorage.getItem(storageKey) || '{}');
 
     // Config
@@ -162,7 +162,7 @@
 
     function newFood(state){
       let p; let tries = 0;
-      do { p = {x:rnd(state.cols), y:rnd(state.rows)}; tries++; if(tries>1000) break; }
+      do { p = {x:rnd(state.cols), y:rnd(state.rows)}; tries++; if(tries>2000) break; }
       while(collisionAt(state, p));
       return p;
     }
@@ -171,7 +171,7 @@
       const hz = [];
       for(let i=0;i<count;i++){
         let p; let tries=0;
-        do { p = {x:rnd(state.cols), y:rnd(state.rows)}; tries++; if(tries>1000) break; }
+        do { p = {x:rnd(state.cols), y:rnd(state.rows)}; tries++; if(tries>2000) break; }
         while(collisionAt(state, p));
         hz.push(p);
       }
@@ -226,7 +226,6 @@
         lastStep: 0,
         hi: Number(localStorage.getItem('snake.multi.hi')||0)
       };
-      // spawn multiple foods
       for(let i=0;i<CFG.foodCount;i++) STATE.foods.push(newFood(STATE));
       updateUI();
     }
@@ -262,41 +261,97 @@
       snake.pendingDir = dir;
     }
 
-    // --- Bot AI (greedy to nearest food + hazard avoidance)
-    function botThink(state){
-      const bot = state.snakes[1];
-      if(!bot.alive) return;
-      const head = bot.body[0];
-      // nearest food
-      let target = state.foods[0];
-      let best = Infinity;
-      for(const f of state.foods){
-        const d = Math.abs(head.x - f.x) + Math.abs(head.y - f.y);
-        if(d < best){ best = d; target = f; }
-      }
-      const choices = [];
-      function nextPos(dir){
-        const d = DIRS[dir];
-        let np = {x: head.x + d[0], y: head.y + d[1]};
-        if(CFG.wrap) np = wrapPos(np);
-        return np;
-      }
-      for(const dir of ['UP','DOWN','LEFT','RIGHT']){
-        if(OPP[bot.dir]===dir) continue; // no reverse
-        const np = nextPos(dir);
-        let bad = false;
-        if(!CFG.wrap && !inBounds(np)) bad = true;
-        if(!bad){
-          for(const s of state.snakes){ for(const c of s.body){ if(equal(c,np)) { bad=true; break; } }
-            if(bad) break; }
-          if(!bad && state.hazards){ for(const h of state.haz){ if(equal(h,np)) { bad=true; break; } } }
+    // --- Bot AI: A* pathfinding to nearest food + safe-area fallback
+    function neighborsOf(p){
+      const res = [
+        {dir:'UP',    x:p.x,   y:p.y-1},
+        {dir:'DOWN',  x:p.x,   y:p.y+1},
+        {dir:'LEFT',  x:p.x-1, y:p.y},
+        {dir:'RIGHT', x:p.x+1, y:p.y},
+      ];
+      if (CFG.wrap) for (const n of res){ n.x=(n.x+CFG.cols)%CFG.cols; n.y=(n.y+CFG.rows)%CFG.rows; }
+      return res;
+    }
+    function isBlocked(state, p, considerTailFree=false){
+      if(!CFG.wrap && !inBounds(p)) return true;
+      if(state.hazards) for(const h of state.haz){ if(equal(h,p)) return true; }
+      for(const s of state.snakes){
+        for(let i=0;i<s.body.length;i++){
+          const cell = s.body[i];
+          // allow the bot's tail to be considered free next tick if not growing
+          if(considerTailFree && s===state.snakes[1] && i===s.body.length-1 && s.grow===0) continue;
+          if(equal(cell,p)) return true;
         }
-        const md = Math.abs(np.x - target.x) + Math.abs(np.y - target.y);
-        const score = bad ? 1e9 : md + Math.random()*0.2; // slight noise to avoid ties
-        choices.push({dir, score});
       }
-      choices.sort((a,b)=>a.score-b.score);
-      if(choices.length) bot.pendingDir = choices[0].dir;
+      return false;
+    }
+    const keyOf = (p)=> `${p.x},${p.y}`;
+    function reconstruct(firstStepFrom, startKey, goalKey){
+      let k = goalKey;
+      while (firstStepFrom.get(k) && firstStepFrom.get(k).prev){
+        const prev = firstStepFrom.get(k).prev;
+        if (prev === startKey) return firstStepFrom.get(k).dir; // first move from start
+        k = prev;
+      }
+      return firstStepFrom.get(goalKey)?.dir || null;
+    }
+    function aStarToNearestFood(state){
+      const bot = state.snakes[1]; const head = bot.body[0];
+      if(!state.foods.length) return null;
+      const foods = state.foods.slice().sort((a,b)=> (Math.abs(head.x-a.x)+Math.abs(head.y-a.y)) - (Math.abs(head.x-b.x)+Math.abs(head.y-b.y)));
+      const startKey = keyOf(head);
+      const gScore = new Map([[startKey,0]]);
+      const fScore = new Map([[startKey,0]]);
+      const firstStepFrom = new Map();
+      const open = new Set([startKey]);
+      const goals = new Set(foods.map(keyOf));
+      const h = (p)=> Math.abs(p.x-foods[0].x)+Math.abs(p.y-foods[0].y);
+      while(open.size){
+        let currentKey=null, best=Infinity;
+        for(const k of open){ const fs=fScore.get(k) ?? Infinity; if(fs<best){ best=fs; currentKey=k; } }
+        const [cx,cy] = currentKey.split(',').map(Number); const current={x:cx,y:cy};
+        if(goals.has(currentKey)) return reconstruct(firstStepFrom, startKey, currentKey);
+        open.delete(currentKey);
+        for(const n of neighborsOf(current)){
+          if(isBlocked(state, n, true)) continue;
+          const nk = keyOf(n);
+          const tentative = (gScore.get(currentKey) ?? Infinity) + 1;
+          if(tentative < (gScore.get(nk) ?? Infinity)){
+            gScore.set(nk, tentative);
+            const dir = firstStepFrom.get(currentKey)?.dir || n.dir;
+            firstStepFrom.set(nk, { prev: currentKey, dir });
+            fScore.set(nk, tentative + h(n));
+            open.add(nk);
+          }
+        }
+      }
+      return null; // no path
+    }
+    function floodFillSize(state, start, limit=800){
+      const seen = new Set();
+      const q = [start];
+      while(q.length && seen.size<limit){
+        const p = q.shift(); const k = keyOf(p); if(seen.has(k)) continue; seen.add(k);
+        for(const n of neighborsOf(p)) if(!isBlocked(state,n,true)) q.push({x:n.x,y:n.y});
+      }
+      return seen.size;
+    }
+    function botThink(state){
+      const bot = state.snakes[1]; if(!bot.alive) return; const head = bot.body[0];
+      const firstDir = aStarToNearestFood(state);
+      if(firstDir){ bot.pendingDir = firstDir; return; }
+      // fallback: maximize reachable open space
+      let bestDir = bot.dir, bestSize = -1;
+      for(const dir of ['UP','DOWN','LEFT','RIGHT']){
+        if(OPP[bot.dir]===dir) continue;
+        const d = DIRS[dir];
+        let np = { x: head.x + d[0], y: head.y + d[1] };
+        if(CFG.wrap) np = wrapPos(np);
+        if(isBlocked(state,np,true)) continue;
+        const size = floodFillSize(state, np, 1000);
+        if(size > bestSize){ bestSize = size; bestDir = dir; }
+      }
+      bot.pendingDir = bestDir;
     }
 
     // --- Tick / Update
@@ -315,17 +370,15 @@
         if(CFG.hazards && hitHazard(next)) { kill(s); continue; }
 
         s.body.unshift(next);
-        let ate = false;
         // eat any overlapping food; support multiple foods
         STATE.foods = STATE.foods.filter(f => {
           if(equal(next,f)){
             s.grow += 2;
             s.score += 10;
-            ate = true; return false;
+            return false;
           }
           return true;
         });
-        // respawn eaten food(s)
         while(STATE.foods.length < CFG.foodCount) STATE.foods.push(newFood(STATE));
 
         if(s.grow>0) s.grow--; else s.body.pop();
@@ -358,7 +411,7 @@
     function draw(){
       ctx.clearRect(0,0,canvas.width, canvas.height);
 
-      // Hazards: draw as red X, clearly distinct from food
+      // Hazards: draw as red X
       if(STATE.hazards){
         for(const h of STATE.haz){
           const x = h.x*CFG.cell, y = h.y*CFG.cell; 
@@ -402,9 +455,10 @@
 
     function shadeHex(hex, percent){
       const v = hex.replace('#','');
-      const r = parseInt(v.slice(0,2),16), g = parseInt(v.slice(2,4),16), b = parseInt(v.slice(4,6),16);
+      let r = parseInt(v.slice(0,2),16), g = parseInt(v.slice(2,4),16), b = parseInt(v.slice(4,6),16);
       const f = (x)=> clamp(Math.round(x + 255*(percent/100)), 0, 255);
-      return `#${f(r).toString(16).padStart(2,'0')}${f(g).toString(16).padStart(2,'0')}${f(b).toString(16,'0')}`.replace('NaN','00');
+      r=f(r); g=f(g); b=f(b);
+      return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
     }
 
     // --- Main Loop
@@ -422,8 +476,8 @@
 
     // --- UI Events
     ui.speed.addEventListener('input', ()=>{ ui.speedLabel.textContent = ui.speed.value; CFG.speed = Number(ui.speed.value); saveConfig(); });
-    ui.cols.addEventListener('change', ()=>{ CFG.cols = clamp(Number(ui.cols.value),12,64); saveConfig(); resizeCanvas(); });
-    ui.rows.addEventListener('change', ()=>{ CFG.rows = clamp(Number(ui.rows.value),10,48); saveConfig(); resizeCanvas(); });
+    ui.cols.addEventListener('change', ()=>{ CFG.cols = clamp(Number(ui.cols.value),12,64); saveConfig(); resizeCanvas(); init(STATE.mode); });
+    ui.rows.addEventListener('change', ()=>{ CFG.rows = clamp(Number(ui.rows.value),10,48); saveConfig(); resizeCanvas(); init(STATE.mode); });
     ui.wrap.addEventListener('change', ()=>{ CFG.wrap = !!ui.wrap.checked; saveConfig(); });
     ui.hazards.addEventListener('change', ()=>{ CFG.hazards = !!ui.hazards.checked; saveConfig(); init(STATE.mode); });
     ui.foodCount.addEventListener('change', ()=>{ CFG.foodCount = clamp(Number(ui.foodCount.value),1,10); ui.foodsLabel.textContent = CFG.foodCount; saveConfig(); init(STATE.mode); });
@@ -438,7 +492,7 @@
     ui.speed.value = CFG.speed; ui.speedLabel.textContent = CFG.speed;
     ui.cols.value = CFG.cols; ui.rows.value = CFG.rows; ui.wrap.checked = CFG.wrap; ui.hazards.checked = CFG.hazards; ui.foodCount.value = CFG.foodCount; ui.foodsLabel.textContent = CFG.foodCount;
     init('BOT');
-    loop(0);
+    requestAnimationFrame(loop);
   })();
   </script>
 </body>
